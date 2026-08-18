@@ -40,12 +40,17 @@ class AwsScriptTests(unittest.TestCase):
 
     def test_lifecycle_scripts_resolve_and_validate_before_mutation(self):
         common = self.read("lib.sh")
-        stop = self.read("stop-cpu.sh") + common
+        stop = self.read("stop-cpu.sh")
         start = self.read("start-cpu.sh")
         describe = self.read("describe-cpu.sh")
-        self.assertIn("describe-tags", stop)
-        self.assertIn("openshell-four-labs", stop)
+        self.assertIn("describe-tags", common)
+        self.assertIn("openshell-four-labs", common)
+        for script in (start, stop, describe):
+            self.assertIn("load_cpu_state", script)
+            self.assertIn("validate_project_instance", script)
         self.assertIn("stop-instances", stop)
+        self.assertLess(stop.index("validate_project_instance"), stop.index("stop-instances"))
+        self.assertLess(start.index("validate_project_instance"), start.index("start-instances"))
         self.assertNotIn("terminate-instances", stop + start + describe)
         self.assertIn("start-instances", start)
         self.assertIn("describe-instances", describe)

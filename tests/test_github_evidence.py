@@ -4,11 +4,13 @@ from pathlib import Path
 import stat
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from openshell_lab.github_evidence import (
     build_evidence,
     collect_evidence,
     extract_issue_numbers,
+    fetch_recent_merges,
     select_recent_merges,
 )
 
@@ -40,6 +42,41 @@ class GitHubEvidenceTests(unittest.TestCase):
     def test_extracts_only_explicit_deduplicated_issue_numbers(self):
         body = "Fixes #50, relates to #51, repeats #50, says issue 52, and names #105."
         self.assertEqual([50, 51], extract_issue_numbers(body, pr_number=105))
+
+    def test_ignores_incidental_and_negated_issue_mentions(self):
+        body = (
+            "Example #40. This does not fix #41 and is not blocked by #44. "
+            "Fixes NVIDIA/OpenShell#42."
+        )
+        self.assertEqual([42], extract_issue_numbers(body, pr_number=100))
+
+    def test_one_relationship_keyword_can_govern_multiple_issue_references(self):
+        body = "Fixes #40, #41 and #42. Example #43."
+        self.assertEqual([40, 41, 42], extract_issue_numbers(body, pr_number=100))
+
+    def test_paginates_until_updated_time_proves_merge_cutoff(self):
+        first_page = [
+            {
+                "number": number,
+                "merged_at": f"2026-08-{18 if number < 6 else 17:02d}T00:00:00Z",
+                "updated_at": "2026-08-19T00:00:00Z",
+            }
+            for number in range(1, 101)
+        ]
+        second_page = [
+            {
+                "number": 101,
+                "merged_at": "2026-08-18T12:00:00Z",
+                "updated_at": "2026-08-18T12:00:00Z",
+            }
+        ]
+        with patch(
+            "openshell_lab.github_evidence._curl_json",
+            side_effect=[first_page, second_page],
+        ) as fetch:
+            selected = fetch_recent_merges("/usr/bin/curl")
+        self.assertEqual(101, selected[0]["number"])
+        self.assertEqual(2, fetch.call_count)
 
     def test_builds_bounded_relationship_evidence(self):
         selected = select_recent_merges(self.pulls)
@@ -75,6 +112,8 @@ fixtures = Path(os.environ["FAKE_GITHUB_FIXTURES"])
 if "/pulls?" in url:
     sys.stdout.write((fixtures / "pulls.json").read_text(encoding="utf-8"))
 else:
+    if "/issues/" not in url:
+        raise SystemExit("unexpected URL: " + url)
     number = url.rsplit("/", 1)[-1]
     issues = json.loads((fixtures / "issues.json").read_text(encoding="utf-8"))
     sys.stdout.write(json.dumps(issues[number]))
@@ -101,7 +140,7 @@ else:
                         os.environ[key] = value
             calls = [json.loads(line) for line in log.read_text().splitlines()]
             self.assertEqual(5, len(evidence["pull_requests"]))
-            self.assertGreaterEqual(len(calls), 2)
+            self.assertEqual(5, len(calls))
             for call in calls:
                 self.assertIn("--fail-with-body", call)
                 self.assertIn("--max-time", call)

@@ -11,18 +11,17 @@ from openshell_lab.tool_agent import run_tool_loop
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="openshell-lab-report")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--curl-bin", default="/usr/bin/curl")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
-    output = arguments.output.expanduser().resolve()
-    if output.is_dir():
-        print("output path is a directory", file=sys.stderr)
-        return 2
     try:
-        result = run_tool_loop(output, curl_bin=arguments.curl_bin)
+        output = arguments.output.expanduser().resolve()
+        if output.is_dir():
+            print("output path is a directory", file=sys.stderr)
+            return 2
+        result = run_tool_loop(output)
     except (OSError, RuntimeError, ValueError):
         print('{"status":"failed"}', file=sys.stderr)
         return 1

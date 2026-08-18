@@ -8,6 +8,10 @@ ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
 source "$ROOT/infra/aws/lib.sh"
 
 _ssh() {
+    ssh -n "${SSH_OPTIONS[@]}" "$SSH_USER@$PUBLIC_IP" "$@"
+}
+
+_ssh_with_stdin() {
     ssh "${SSH_OPTIONS[@]}" "$SSH_USER@$PUBLIC_IP" "$@"
 }
 
@@ -81,7 +85,7 @@ if [[ -z "$model_key" ]]; then
     read -r -s -p 'OpenAI API key: ' model_key
     printf '\n' >&2
 fi
-printf '%s\n' "$model_key" | _ssh \
+printf '%s\n' "$model_key" | _ssh_with_stdin \
     'IFS= read -r OPENAI_API_KEY; export OPENAI_API_KEY; cd "$HOME/git/openshell-lab"; ./labs/lab1/configure-openai.sh'
 unset model_key OPENAI_API_KEY
 

@@ -1,6 +1,7 @@
 import json
+import io
 from pathlib import Path
-import subprocess
+import stat
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -32,16 +33,37 @@ def model_tool_call(call_id, name, arguments):
 
 
 class ToolAgentTests(unittest.TestCase):
+    def test_prompt_declares_the_exact_validated_report_contract(self):
+        self.assertIn(tool_agent.REPORT_TITLE, tool_agent.SYSTEM_PROMPT)
+        for required in (
+            "## Executive Summary",
+            "## PR #{number}: {title}",
+            "- URL:",
+            "- Merged:",
+            "- Author:",
+            "- Labels:",
+            "- Associated issues:",
+            "### What changed",
+            "### Larger task context",
+        ):
+            self.assertIn(required, tool_agent.SYSTEM_PROMPT)
+
     def test_request_is_bounded_and_contains_no_provider_credentials(self):
         body = tool_agent.build_chat_request([{"role": "user", "content": "report"}])
-        self.assertEqual(1800, body["max_tokens"])
-        self.assertEqual(0.2, body["temperature"])
+        self.assertEqual(8000, body["max_completion_tokens"])
+        self.assertNotIn("max_tokens", body)
+        self.assertEqual(1.0, body["temperature"])
+        self.assertNotIn("reasoning_effort", body)
         self.assertEqual("auto", body["tool_choice"])
         self.assertEqual(4, len(body["tools"]))
         self.assertFalse({"model", "api_key", "authorization"}.intersection(body))
         self.assertEqual(
             "https://inference.local/v1/chat/completions", tool_agent.MODEL_URL
         )
+
+    def test_agent_rejects_an_operator_supplied_executable(self):
+        with self.assertRaisesRegex(ValueError, "curl executable"):
+            tool_agent.run_tool_loop(Path("report.md"), curl_bin="./curl")
 
     def test_dispatch_restricts_pull_inspection_to_selected_set(self):
         state = tool_agent.ToolState(Path("report.md"), "/usr/bin/curl")
@@ -78,15 +100,82 @@ class ToolAgentTests(unittest.TestCase):
                 )
 
     def test_response_larger_than_eight_mib_is_rejected(self):
-        completed = subprocess.CompletedProcess(
-            args=["curl"],
-            returncode=0,
-            stdout=b"x" * (tool_agent.MAX_RESPONSE_BYTES + 1),
-            stderr=b"",
-        )
-        with patch.object(subprocess, "run", return_value=completed):
+        with tempfile.TemporaryDirectory() as directory:
+            fake_curl = Path(directory) / "curl"
+            fake_curl.write_text(
+                "#!/usr/bin/env python3\n"
+                f"import sys\nsys.stdout.buffer.write(b'x' * {tool_agent.MAX_RESPONSE_BYTES + 1})\n",
+                encoding="utf-8",
+            )
+            fake_curl.chmod(fake_curl.stat().st_mode | stat.S_IXUSR)
             with self.assertRaisesRegex(ValueError, "8 MiB"):
-                tool_agent._curl_json("/usr/bin/curl", "https://example.test")
+                tool_agent._curl_json(str(fake_curl), "https://example.test")
+
+    def test_model_request_body_is_sent_on_standard_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake_curl = root / "curl"
+            captured = root / "stdin.json"
+            fake_curl.write_text(
+                "#!/usr/bin/env python3\n"
+                "import os, pathlib, sys\n"
+                "pathlib.Path(os.environ['CAPTURE_STDIN']).write_bytes(sys.stdin.buffer.read())\n"
+                "sys.stdout.write('{}')\n",
+                encoding="utf-8",
+            )
+            fake_curl.chmod(fake_curl.stat().st_mode | stat.S_IXUSR)
+            with patch.dict("os.environ", {"CAPTURE_STDIN": str(captured)}):
+                tool_agent._curl_json(
+                    str(fake_curl),
+                    "https://inference.local/v1/chat/completions",
+                    {"messages": [{"role": "user", "content": "private prompt"}]},
+                )
+            self.assertEqual("private prompt", json.loads(captured.read_text())["messages"][0]["content"])
+
+    def test_broken_pipe_while_closing_request_still_reads_curl_status(self):
+        class BrokenClose(io.BytesIO):
+            first_close = True
+
+            def close(self):
+                if self.first_close:
+                    self.first_close = False
+                    raise BrokenPipeError
+                super().close()
+
+        class FakeProcess:
+            def __init__(self):
+                self.stdin = BrokenClose()
+                self.stdout = io.BytesIO(b"{}")
+
+            def wait(self):
+                return 0
+
+            def poll(self):
+                return 0
+
+            def kill(self):
+                raise AssertionError("completed process should not be killed")
+
+        with patch.object(tool_agent.subprocess, "Popen", return_value=FakeProcess()):
+            self.assertEqual(
+                {},
+                tool_agent._curl_json(
+                    "/usr/bin/curl",
+                    "https://inference.local/v1/chat/completions",
+                    {"messages": []},
+                ),
+            )
+
+    def test_reselecting_merges_clears_stale_issue_state(self):
+        state = tool_agent.ToolState(Path("report.md"), "/usr/bin/curl")
+        state.issues[42] = {"number": 42}
+        pulls = [
+            {"number": number, "merged_at": f"2026-08-18T0{number}:00:00Z"}
+            for number in range(1, 6)
+        ]
+        with patch.object(tool_agent.github_evidence, "fetch_recent_merges", return_value=pulls):
+            tool_agent.dispatch_tool("list_recent_merges", {"limit": 5}, state)
+        self.assertEqual({}, state.issues)
 
     def test_tool_result_larger_than_two_mib_is_rejected(self):
         response = model_tool_call(

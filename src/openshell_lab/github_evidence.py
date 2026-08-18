@@ -11,10 +11,11 @@ PULLS_URL = (
     "?state=closed&sort=updated&direction=desc&per_page=100"
 )
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+MAX_PULL_PAGES = 10
 
 
 def _curl_json(url: str, curl_bin: str = "/usr/bin/curl") -> object:
-    result = subprocess.run(
+    process = subprocess.Popen(
         [
             curl_bin,
             "--silent",
@@ -33,23 +34,42 @@ def _curl_json(url: str, curl_bin: str = "/usr/bin/curl") -> object:
             "openshell-lab-merge-reporter/1.0",
             url,
         ],
-        check=True,
-        capture_output=True,
-        text=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
     )
-    if len(result.stdout.encode("utf-8")) > MAX_RESPONSE_BYTES:
-        raise ValueError(f"GitHub response exceeded {MAX_RESPONSE_BYTES} bytes")
-    return json.loads(result.stdout)
+    chunks = []
+    try:
+        total = 0
+        while True:
+            chunk = process.stdout.read(64 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_RESPONSE_BYTES:
+                raise ValueError(f"GitHub response exceeded {MAX_RESPONSE_BYTES} bytes")
+            chunks.append(chunk)
+        returncode = process.wait()
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+        process.stdout.close()
+    response_body = b"".join(chunks)
+    if returncode != 0:
+        detail = response_body.decode("utf-8", "replace")[:500]
+        raise RuntimeError(f"curl failed with status {returncode}: {detail}")
+    try:
+        return json.loads(response_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"invalid GitHub JSON response from {url}") from error
 
 
 def collect_evidence(
     curl_bin: str = "/usr/bin/curl",
     generated_at: str | None = None,
 ) -> dict:
-    pulls_payload = _curl_json(PULLS_URL, curl_bin)
-    if not isinstance(pulls_payload, list):
-        raise ValueError("GitHub pulls response must be a JSON list")
-    pulls = select_recent_merges(pulls_payload)
+    pulls = fetch_recent_merges(curl_bin)
 
     issue_numbers = []
     for pull in pulls:
@@ -67,6 +87,32 @@ def collect_evidence(
             raise ValueError(f"GitHub issue {number} response must be a JSON object")
         issues[number] = payload
     return build_evidence(pulls, issues, generated_at=generated_at)
+
+
+def fetch_recent_merges(curl_bin: str = "/usr/bin/curl") -> list[dict]:
+    """Fetch enough updated-time-ordered pages to prove the latest five merges."""
+    collected = []
+    for page_number in range(1, MAX_PULL_PAGES + 1):
+        page = _curl_json(f"{PULLS_URL}&page={page_number}", curl_bin)
+        if not isinstance(page, list):
+            raise ValueError("GitHub pulls response must be a JSON list")
+        collected.extend(page)
+        try:
+            selected = select_recent_merges(collected)
+        except ValueError:
+            if len(page) < 100:
+                raise
+            continue
+        if len(page) < 100:
+            return selected
+        tail_updated_at = page[-1].get("updated_at") if page else None
+        if not isinstance(tail_updated_at, str):
+            raise ValueError("GitHub pull page has no updated-time pagination boundary")
+        if tail_updated_at <= selected[-1]["merged_at"]:
+            return selected
+    raise ValueError(
+        f"could not prove the latest five merges within {MAX_PULL_PAGES} GitHub pages"
+    )
 
 
 def select_recent_merges(pulls: list[dict], limit: int = 5) -> list[dict]:
@@ -93,9 +139,40 @@ def select_recent_merges(pulls: list[dict], limit: int = 5) -> list[dict]:
     return selected
 
 
+_RELATIONSHIP = re.compile(
+    r"(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?|relate[sd]?\s+to|part\s+of|"
+    r"follows?|follow-up\s+to|depends\s+on|blocked\s+by)\s*$",
+    re.IGNORECASE,
+)
+_NEGATED_RELATIONSHIP = re.compile(
+    r"(?:does\s+not|did\s+not|not)\s+"
+    r"(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?|relate[sd]?\s+to|part\s+of|"
+    r"follows?|follow-up\s+to|depends?\s+on|blocked\s+by)\s*$",
+    re.IGNORECASE,
+)
+_ISSUE_REFERENCE = re.compile(
+    r"(?<![A-Za-z0-9_/])(?:(?:NVIDIA/OpenShell)#|#)([1-9][0-9]*)",
+    re.IGNORECASE,
+)
+
+
 def extract_issue_numbers(body: str, pr_number: int, limit: int = 5) -> list[int]:
     found = []
-    for match in re.finditer(r"(?<![A-Za-z0-9_])#([1-9][0-9]*)", body or ""):
+    previous_end = None
+    relationship_clause = False
+    for match in _ISSUE_REFERENCE.finditer(body or ""):
+        prefix = (body or "")[max(0, match.start() - 80) : match.start()]
+        if _NEGATED_RELATIONSHIP.search(prefix):
+            relationship_clause = False
+        elif _RELATIONSHIP.search(prefix):
+            relationship_clause = True
+        elif previous_end is None or not relationship_clause or not re.fullmatch(
+            r"\s*(?:(?:,|and|&)\s*)+", (body or "")[previous_end : match.start()], re.IGNORECASE
+        ):
+            relationship_clause = False
+        previous_end = match.end()
+        if not relationship_clause:
+            continue
         number = int(match.group(1))
         if number != pr_number and number not in found:
             found.append(number)

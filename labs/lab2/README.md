@@ -2,7 +2,12 @@
 
 This lab keeps Lab 1's GitHub-only network rule and activates Landlock as a
 hard requirement. The agent can read its runtime and application files but can
-write only beneath `/var/www/html` inside the sandbox.
+persist output only beneath `/var/www/html` inside the sandbox. OpenShell's
+required runtime baseline also permits `/tmp` scratch data and `/dev/null`.
+
+The application is built into a numeric non-root image before sandbox
+creation. This is necessary because OpenShell correctly prevents a later SSH
+upload from writing into the policy's read-only application path.
 
 The Podman driver bind-mounts the host directory
 `/var/www/html/openshell-lab` at the sandbox path `/var/www/html`. Because RHEL
@@ -23,5 +28,6 @@ The report is available at:
 http://HOST_PUBLIC_IP/openshell-lab/nvidia-openshell-last-5-merges.md
 ```
 
-The verifier proves that writes to `/sandbox` and `/tmp` fail while a write to
-the webroot succeeds. The host directory persists after sandbox deletion.
+The verifier proves that writes to `/sandbox` fail while webroot publication
+and temporary runtime scratch succeed. Only the host webroot persists after
+sandbox deletion.

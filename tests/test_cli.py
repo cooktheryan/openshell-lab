@@ -10,6 +10,10 @@ from openshell_lab import cli
 
 
 class CliTests(unittest.TestCase):
+    def test_cli_does_not_expose_an_executable_override(self):
+        with self.assertRaises(SystemExit):
+            cli.main(["--output", "report.md", "--curl-bin", "./curl"])
+
     def test_cli_publishes_only_sanitized_json_status(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "report.md"
@@ -26,17 +30,23 @@ class CliTests(unittest.TestCase):
                 status = cli.main(["--output", str(output)])
         self.assertEqual(0, status)
         payload = json.loads(stdout.getvalue())
-        self.assertEqual("published", payload["status"])
-        self.assertEqual(5, payload["pull_request_count"])
-        self.assertNotIn("report_file", payload)
+        self.assertEqual(
+            {"status": "published", "pull_request_count": 5, "tool_calls": 8},
+            payload,
+        )
 
     def test_cli_refuses_directory_output(self):
         with tempfile.TemporaryDirectory() as directory:
             stderr = io.StringIO()
-            with redirect_stderr(stderr):
+            stdout = io.StringIO()
+            with patch.object(cli, "run_tool_loop") as run_tool_loop, redirect_stderr(
+                stderr
+            ), redirect_stdout(stdout):
                 status = cli.main(["--output", directory])
         self.assertNotEqual(0, status)
         self.assertIn("directory", stderr.getvalue())
+        self.assertEqual("", stdout.getvalue())
+        run_tool_loop.assert_not_called()
 
     def test_cli_returns_nonzero_without_leaking_internal_error(self):
         stderr = io.StringIO()
@@ -45,6 +55,15 @@ class CliTests(unittest.TestCase):
         ), redirect_stderr(stderr):
             status = cli.main(["--output", "report.md"])
         self.assertNotEqual(0, status)
+        self.assertEqual('{"status":"failed"}\n', stderr.getvalue())
+
+    def test_cli_normalization_failure_is_sanitized(self):
+        stderr = io.StringIO()
+        with patch.object(Path, "resolve", side_effect=OSError("path detail")), redirect_stderr(
+            stderr
+        ):
+            status = cli.main(["--output", "report.md"])
+        self.assertEqual(1, status)
         self.assertEqual('{"status":"failed"}\n', stderr.getvalue())
 
 

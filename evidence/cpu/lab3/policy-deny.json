@@ -1,0 +1,32 @@
+{
+  "active_version": 1,
+  "config_revision": 6857801050862594528,
+  "hash": "653445e677b57999d0a7472ad798d566e2459b5f5d61e77b718a104dca12640e",
+  "policy": {
+    "filesystem_policy": {
+      "include_workdir": false,
+      "read_only": [
+        "/usr",
+        "/lib64",
+        "/etc",
+        "/proc",
+        "/dev/urandom",
+        "/opt/openshell-lab"
+      ],
+      "read_write": [
+        "/var/www/html",
+        "/tmp",
+        "/dev/null"
+      ]
+    },
+    "landlock": {
+      "compatibility": "hard_requirement"
+    },
+    "version": 1
+  },
+  "policy_source": "sandbox",
+  "sandbox": "openshell-lab3",
+  "scope": "sandbox",
+  "status": "effective",
+  "version": 1
+}

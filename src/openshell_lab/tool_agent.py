@@ -6,7 +6,12 @@ from pathlib import Path
 import subprocess
 
 from openshell_lab import github_evidence
-from openshell_lab.report import render_evidence_index, validate_markdown, write_report
+from openshell_lab.report import (
+    REPORT_TITLE,
+    render_evidence_index,
+    validate_markdown,
+    write_report,
+)
 
 
 MODEL_URL = "https://inference.local/v1/chat/completions"
@@ -21,7 +26,23 @@ Inspect selected pull requests as needed. Inspect only issues explicitly linked
 from selected pull request bodies. Finish by calling write_report. Never invent
 labels, issues, milestones, or larger-task relationships. Classify work as part
 of a larger task only when an issue, meaningful label, milestone, or explicit
-body relationship provides evidence."""
+body relationship provides evidence.
+
+
+The Markdown passed to write_report MUST follow this exact contract:
+# NVIDIA/OpenShell: Last 5 Merged Pull Requests
+## Executive Summary
+## PR #{number}: {title}
+- URL:
+- Merged:
+- Author:
+- Labels:
+- Associated issues:
+### What changed
+### Larger task context
+
+Repeat the PR section exactly once for each selected pull request, in the order
+returned by list_recent_merges. Do not add text before the exact report title."""
 
 TOOLS = [
     {
@@ -96,12 +117,14 @@ class ToolState:
 
 
 def build_chat_request(messages: list[dict]) -> dict:
+    # OpenShell's inference.local route injects the operator-selected provider model.
+    # Keeping it out of the sandbox request lets the same image use GPT-5.5 or Qwen.
     return {
         "messages": messages,
         "tools": TOOLS,
         "tool_choice": "auto",
-        "temperature": 0.2,
-        "max_tokens": 1800,
+        "temperature": 1.0,
+        "max_completion_tokens": 8000,
     }
 
 
@@ -189,6 +212,9 @@ def _curl_json(curl_bin: str, url: str, request_body: dict | None = None) -> obj
             ]
         )
     else:
+        request_payload = json.dumps(request_body, separators=(",", ":")).encode(
+            "utf-8"
+        )
         command.extend(
             [
                 "--request",
@@ -196,18 +222,49 @@ def _curl_json(curl_bin: str, url: str, request_body: dict | None = None) -> obj
                 "--header",
                 "Content-Type: application/json",
                 "--data-binary",
-                json.dumps(request_body, separators=(",", ":")),
+                "@-",
             ]
         )
     command.append(url)
-    result = subprocess.run(command, capture_output=True, check=False)
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout).decode("utf-8", "replace")[:500]
-        raise RuntimeError(f"curl failed with status {result.returncode}: {detail}")
-    if len(result.stdout) > MAX_RESPONSE_BYTES:
-        raise ValueError("response exceeds 8 MiB limit")
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE if request_body is not None else subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    chunks = []
     try:
-        return json.loads(result.stdout)
+        if request_body is not None:
+            try:
+                process.stdin.write(request_payload)
+            except BrokenPipeError:
+                pass
+            finally:
+                try:
+                    process.stdin.close()
+                except BrokenPipeError:
+                    pass
+        total = 0
+        while True:
+            chunk = process.stdout.read(64 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_RESPONSE_BYTES:
+                raise ValueError("response exceeds 8 MiB limit")
+            chunks.append(chunk)
+        returncode = process.wait()
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+        process.stdout.close()
+    response_body = b"".join(chunks)
+    if returncode != 0:
+        detail = response_body.decode("utf-8", "replace")[:500]
+        raise RuntimeError(f"curl failed with status {returncode}: {detail}")
+    try:
+        return json.loads(response_body)
     except json.JSONDecodeError as error:
         raise ValueError(f"invalid JSON response from {url}") from error
 
@@ -229,11 +286,9 @@ def dispatch_tool(name: str, arguments: dict, state: ToolState) -> dict:
     if name == "list_recent_merges":
         if arguments != {"limit": 5}:
             raise ValueError("list_recent_merges requires limit 5")
-        payload = _curl_json(state.curl_bin, github_evidence.PULLS_URL)
-        if not isinstance(payload, list):
-            raise ValueError("GitHub pull response must be an array")
-        state.selected_pulls = github_evidence.select_recent_merges(payload)
+        state.selected_pulls = github_evidence.fetch_recent_merges(state.curl_bin)
         state.selected_numbers = [pull["number"] for pull in state.selected_pulls]
+        state.issues.clear()
         return {
             "repository": github_evidence.REPOSITORY,
             "pull_requests": [compact_pull(pull, 500) for pull in state.selected_pulls],
@@ -274,6 +329,7 @@ def dispatch_tool(name: str, arguments: dict, state: ToolState) -> dict:
         evidence = github_evidence.build_evidence(state.selected_pulls, state.issues)
         markdown = validate_markdown(arguments["markdown"], evidence)
         markdown = markdown.rstrip() + "\n\n" + render_evidence_index(evidence)
+        markdown = validate_markdown(markdown, evidence)
         write_report(state.report_path, markdown)
         state.report_published = True
         return {"published": True, "path": str(state.report_path)}
@@ -295,6 +351,8 @@ def run_tool_loop(
     curl_bin: str = "/usr/bin/curl",
     max_tool_calls: int = MAX_TOOL_CALLS,
 ) -> dict:
+    if curl_bin != "/usr/bin/curl":
+        raise ValueError("unsupported curl executable; expected /usr/bin/curl")
     state = ToolState(report_path, curl_bin)
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},

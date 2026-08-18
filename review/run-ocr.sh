@@ -10,6 +10,9 @@ actual=$(shasum -a 256 "$(command -v ocr)" | cut -d ' ' -f1)
     exit 1
 }
 : "${OPENAI_API_KEY:?OpenCodeReview requires OPENAI_API_KEY in the environment}"
+output=${OCR_OUTPUT:-$REVIEW_DIR/ocr-cpu.json}
+exclude=${OCR_EXCLUDE:-.git/**,.venv/**,evidence/**,review/ocr-*.json,features/dashboard.html,features/steps/**}
+budget=${OCR_TOKEN_BUDGET:-160000}
 
 ocr scan \
     --repo "$ROOT" \
@@ -17,7 +20,7 @@ ocr scan \
     --model gpt-5.5 \
     --format json \
     --audience agent \
-    --max-tokens-budget 120000 \
-    --exclude '.git/**,.venv/**,evidence/**,review/ocr-*.json' \
+    --max-tokens-budget "$budget" \
+    --exclude "$exclude" \
     --background 'Review security, correctness, OpenShell policy least privilege, secret handling, failure behavior, and documentation accuracy. Treat unverified deployment claims as findings.' \
-    >"$REVIEW_DIR/ocr-cpu.json"
+    >"$output"

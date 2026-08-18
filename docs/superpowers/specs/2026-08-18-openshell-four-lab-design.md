@@ -4,14 +4,14 @@
 
 Build a repeatable four-lab demonstration that starts with remote OpenAI inference and GitHub-only agent egress, adds filesystem confinement, packages the application in a Podman image, and finishes with the same application using local Qwen inference through vLLM.
 
-The repository root is `/Users/rcook/git/openshell-lab`. The deployed source root is `/home/ec2-user/openshell-lab`. No credential, token, private key, generated provider database, or unredacted environment file may enter Git history or a GitHub push.
+The repository root is `/Users/rcook/git/openshell-lab`. The deployed source root is `/home/ec2-user/git/openshell-lab`. No credential, token, private key, generated provider database, or unredacted environment file may enter Git history or a GitHub push.
 
 ## Demonstration Narrative
 
 The labs change one security or infrastructure boundary at a time:
 
-1. OpenShell restricts ordinary agent egress to public GitHub API reads while deliberately applying no Landlock filesystem rules.
-2. The same application gains fail-closed filesystem enforcement and can write only to `/var/www/html` inside the sandbox, which maps to a dedicated host publication directory.
+1. OpenShell restricts ordinary agent egress to public GitHub API reads while retaining its enforced baseline filesystem posture.
+2. The same application gains fail-closed filesystem enforcement and can persist only to `/var/www/html` inside the sandbox, which maps to a dedicated host publication directory.
 3. The application becomes an immutable, non-root Podman image and demonstrates both denied and allowed GitHub access under OpenShell.
 4. The same image and agent workflow move from OpenAI-managed inference to the previously validated Qwen/vLLM GPU deployment.
 
@@ -41,7 +41,7 @@ Reuse the stopped validated instance unless the operator explicitly supplies a r
 - AWS Region: `us-east-2`
 - Instance: `i-000d2fc821040d9e3`
 - Instance type: `g6e.12xlarge`
-- GPU topology: four NVIDIA L40S GPUs with 183,104 MiB aggregate GPU memory
+- GPU topology: four NVIDIA L40S GPUs with 184,272 MiB aggregate GPU memory
 - vLLM model: `Qwen/Qwen3.6-27B`
 - Precision: unquantized BF16
 - Tensor parallelism: 4
@@ -53,8 +53,8 @@ The existing GPU host preserves the previously validated driver, model cache, vL
 
 The application has two separable responsibilities:
 
-1. A deterministic evidence collector invokes `/usr/bin/curl` to make read-only GitHub REST requests. It normalizes pull request, issue, label, and merge evidence into structured JSON. It never asks the model to invent or retrieve evidence.
-2. A bounded tool-calling agent sends the evidence to the configured OpenAI-compatible Chat Completions endpoint and validates the returned Markdown. It limits tool iterations, request time, response size, and report structure.
+1. A bounded tool-calling agent decides which of four reviewed tools to invoke. The tools use `/usr/bin/curl` for read-only GitHub REST requests, constrain pull and issue selection, and normalize evidence into structured JSON.
+2. The same agent calls the configured OpenAI-compatible Chat Completions endpoint and publishes only through a validated `write_report` tool. It limits tool calls, request time, response size, tool-result size, and report structure.
 
 The model-facing tool loop uses the same OpenAI-compatible request contract for remote OpenAI and local vLLM. The application addresses OpenShell-managed inference at `https://inference.local/v1`; it never receives the provider's actual base URL or API key.
 
@@ -63,7 +63,7 @@ The default remote model identifier is `gpt-5.5`. Deployment validates that the 
 Report validation requires:
 
 - exactly five distinct merged pull requests;
-- a stable heading and generation timestamp;
+- a stable heading and executive summary;
 - PR number, title, author, merge timestamp, and URL for each entry;
 - labels or an explicit statement that no labels were present;
 - associated issue/task evidence or an explicit statement that none was found;
@@ -94,13 +94,13 @@ No GitHub token is required for the public lab. If rate limiting makes authentic
 
 ### Lab 1 filesystem posture
 
-Lab 1 deliberately disables Landlock filesystem restriction by supplying an explicit filesystem policy with:
+OpenShell's enforced network proxy enriches every policy with a minimum runtime filesystem baseline before applying Landlock. A simultaneous GitHub-only proxy and zero-rule Landlock posture is therefore unsupported. Lab 1 states and verifies the effective baseline explicitly:
 
-- `include_workdir: false`;
-- an empty read-only list;
-- an empty read-write list.
+- `include_workdir: true` for the uploaded application and downloaded report;
+- read-only system libraries, certificates, process metadata, and entropy devices;
+- writable `/tmp` and `/dev/null` runtime paths.
 
-OpenShell's Linux supervisor treats an empty effective path set as a Landlock no-op. The lab must show this effective policy and label the behavior clearly; omission of the filesystem section is not equivalent because OpenShell defaults the work directory to writable.
+The lab verifies that OpenShell built the Landlock ruleset; it does not claim a no-op.
 
 Lab 1 writes its report within the sandbox workspace and downloads it through the OpenShell CLI. It does not mount the host web directory.
 
@@ -109,13 +109,13 @@ Lab 1 writes its report within the sandbox workspace and downloads it through th
 These labs recreate the sandbox because filesystem policy is static. The policy:
 
 - reads only the system libraries, certificates, devices, application code, and runtime paths proven necessary by execution;
-- writes only `/var/www/html`;
+- persists only to `/var/www/html`, with `/tmp` and `/dev/null` retained as bounded runtime paths;
 - sets `include_workdir: false`;
 - uses `landlock.compatibility: hard_requirement` so unavailable enforcement aborts startup;
-- sets `PYTHONDONTWRITEBYTECODE=1` and avoids temporary-file APIs outside the target directory;
+- sets `PYTHONDONTWRITEBYTECODE=1` and creates report temporary files within the target directory;
 - creates atomic report temporary files within `/var/www/html` before rename.
 
-Tests must prove successful report creation and denied writes to `/tmp`, `/sandbox`, `/home`, and `/etc`. No convenience write exception may be added merely to make a test pass.
+Tests prove successful report creation, allowed runtime scratch, and denied writes to `/sandbox`, `/home`, and `/etc`. This reflects the effective OpenShell proxy baseline observed on RHEL 10.
 
 ## Host Publication Design
 
@@ -136,7 +136,7 @@ The upstream image currently has no OCI `USER`, so the derived image must:
 - create an explicit unprivileged numeric user and group accepted by OpenShell;
 - set the OCI `USER` and a non-writable application working directory;
 - direct report output to `/var/www/html` through an explicit argument;
-- include image labels identifying the source revision without embedding secrets.
+- remain free of credentials and mutable application state.
 
 The image build is reproducible through Podman. A deny run and allow run use the same image and static filesystem posture; only the dynamic network policy changes. The deny run must fail on GitHub access, and the allow run must produce a valid five-merge report.
 
@@ -175,8 +175,8 @@ Automation writes mutable deployment state beneath a gitignored `state/` directo
 Behavior is specified first with EARS requirements expressed as Gherkin `Rule` titles. Scenarios cover:
 
 - GitHub-only network allowance and three independent deny proofs;
-- Lab 1's explicit filesystem no-op;
-- Labs 2–4's sole writable path and denied path matrix;
+- Lab 1's explicit baseline filesystem posture;
+- Labs 2–4's persistent webroot boundary, runtime scratch paths, and denied path matrix;
 - deterministic five-merge evidence and Markdown quality;
 - immutable non-root image construction;
 - secret exclusion and redaction;
@@ -203,8 +203,8 @@ Each lab also has a focused README that can be followed independently after shar
 The project is complete only when:
 
 1. the RHEL 10 `t3.micro` launches and passes OpenShell health checks;
-2. Lab 1 produces a useful report with GitHub-only ordinary egress and demonstrably no Landlock filesystem rules;
-3. Lab 2 publishes a report while every tested non-`/var/www/html` write fails;
+2. Lab 1 produces a useful report with GitHub-only ordinary egress and a verified baseline Landlock ruleset;
+3. Lab 2 publishes a report while persistent writes outside `/var/www/html` fail and bounded runtime scratch remains available;
 4. Lab 3 records and builds the pinned non-root Containerfile and proves policy deny/allow behavior;
 5. Lab 4 runs that application image against Qwen/vLLM on four L40S GPUs and passes tool-calling, network, filesystem, and report-quality checks;
 6. both OpenCodeReview checkpoints are resolved and rerun;

@@ -53,6 +53,13 @@ class RepositorySafetyTests(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("identity.txt", result.stdout)
 
+    def test_scanner_rejects_github_token_without_printing_it(self):
+        secret = "github_pat_" + "A" * 40
+        result = self._scan("unsafe.txt", f"GITHUB_TOKEN={secret}\n")
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("unsafe.txt", result.stdout)
+        self.assertNotIn(secret, result.stdout + result.stderr)
+
     def test_scanner_allows_unassigned_credential_variable_name(self):
         result = self._scan("safe.sh", "export OPENAI_API_KEY\nunset OPENAI_API_KEY\n")
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)

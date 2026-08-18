@@ -20,6 +20,4 @@ curl --silent --show-error --fail-with-body \
     | cmp - "$REPORT"
 openshell logs "$SANDBOX" --source sandbox -n 500 \
     >"$ROOT/evidence/lab3/sandbox.log"
-openshell sandbox delete "$SANDBOX" >/dev/null
-test -s "$REPORT"
-printf 'lab3 verification passed; report persisted after sandbox deletion\n'
+printf 'lab3 verification passed; sandbox and report service remain running\n'

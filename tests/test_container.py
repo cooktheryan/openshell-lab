@@ -43,6 +43,7 @@ class ContainerArtifactTests(unittest.TestCase):
         self.assertTrue(copy_lines)
         self.assertTrue(all("/var/www/html" not in line for line in copy_lines))
         self.assertIn("PYTHONDONTWRITEBYTECODE=1", self.containerfile)
+        self.assertNotIn("python3 curl shadow-utils", self.containerfile)
 
     def test_image_does_not_copy_credentials(self):
         lowered = self.containerfile.lower()

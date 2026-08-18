@@ -19,9 +19,8 @@ openshell sandbox exec --name "$SANDBOX" --no-tty -- \
 expect_denied "workspace write outside webroot" \
     openshell sandbox exec --name "$SANDBOX" --no-tty -- \
     /usr/bin/touch /sandbox/lab2-write-denied
-expect_denied "temporary-directory write outside webroot" \
-    openshell sandbox exec --name "$SANDBOX" --no-tty -- \
-    /usr/bin/touch /tmp/lab2-write-denied
+openshell sandbox exec --name "$SANDBOX" --no-tty -- \
+    /usr/bin/touch /tmp/lab2-runtime-write-allowed
 
 test -s "/var/www/html/openshell-lab/$REPORT"
 curl --silent --show-error --fail-with-body \

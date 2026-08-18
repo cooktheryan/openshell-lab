@@ -5,23 +5,27 @@ import yaml
 
 
 ROOT = Path(__file__).parents[1]
-POLICY = ROOT / "policies" / "lab1-github-only-no-filesystem.yaml"
+POLICY = ROOT / "policies" / "lab1-github-only-baseline-filesystem.yaml"
 LAB = ROOT / "labs" / "lab1"
 
 
 class Lab1ArtifactTests(unittest.TestCase):
+    def test_run_waits_for_async_sandbox_deletion(self):
+        text = (LAB / "run.sh").read_text(encoding="utf-8")
+        self.assertIn("while openshell sandbox list --names", text)
+
     @classmethod
     def setUpClass(cls):
         if not POLICY.is_file():
             raise AssertionError(f"missing {POLICY}")
         cls.policy = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
 
-    def test_filesystem_configuration_is_an_explicit_noop(self):
+    def test_filesystem_configuration_uses_the_openshell_baseline(self):
         self.assertEqual(1, self.policy["version"])
         filesystem = self.policy["filesystem_policy"]
-        self.assertFalse(filesystem["include_workdir"])
-        self.assertEqual([], filesystem["read_only"])
-        self.assertEqual([], filesystem["read_write"])
+        self.assertTrue(filesystem["include_workdir"])
+        self.assertIn("/usr", filesystem["read_only"])
+        self.assertIn("/tmp", filesystem["read_write"])
         self.assertEqual("best_effort", self.policy["landlock"]["compatibility"])
 
     def test_network_allows_only_read_only_github_for_curl(self):
@@ -61,7 +65,7 @@ class Lab1ArtifactTests(unittest.TestCase):
             "--request POST",
             "/sandbox",
             "/tmp",
-            "Landlock filesystem sandbox skipped: no paths configured",
+            "Landlock ruleset built",
         ):
             self.assertIn(expected, text)
 

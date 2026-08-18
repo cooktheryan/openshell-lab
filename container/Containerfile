@@ -1,7 +1,7 @@
 FROM quay.io/aipcc/agentic-ci/openshell@sha256:06a978ed76d32f2341f9a36271a5ce21cf64a9a562b0eb04d0d9eb1aeb23729f
 
 USER 0
-RUN dnf install -y python3 curl shadow-utils \
+RUN dnf install -y python3 shadow-utils \
     && dnf clean all \
     && groupadd --gid 1500 openshell-agent \
     && useradd --uid 1500 --gid 1500 --home-dir /opt/openshell-lab \

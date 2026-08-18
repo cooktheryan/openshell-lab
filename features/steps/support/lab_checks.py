@@ -82,6 +82,10 @@ class LabChecks:
             "Five evidence-grounded merge summaries.",
         ]
         for pull in evidence["pull_requests"]:
+            associated_issues = ", ".join(
+                f"#{issue['number']} ({issue['state']})"
+                for issue in pull["associated_issues"]
+            ) or "none identified"
             lines.extend(
                 [
                     f"## PR #{pull['number']}: {pull['title']}",
@@ -89,7 +93,7 @@ class LabChecks:
                     f"- Merged: {pull['merged_at']}",
                     f"- Author: {pull['author']}",
                     "- Labels: " + (", ".join(pull["labels"]) or "none"),
-                    "- Associated issues: none identified",
+                    f"- Associated issues: {associated_issues}",
                     "### What changed",
                     "The evidence shows a focused repository change.",
                     "### Larger task context",
@@ -117,14 +121,21 @@ class LabChecks:
             self.context.lab_state["report_status"] = "accepted"
 
     def assert_report_status(self, status):
-        assert self.context.lab_state["report_status"] == status
+        allowed = {"accepted", "rejected"}
+        if status not in allowed:
+            raise AssertionError(f"unsupported report status: {status}")
+        if self.context.lab_state["report_status"] != status:
+            raise AssertionError(
+                f"expected report status {status}, got "
+                f"{self.context.lab_state['report_status']}"
+            )
 
     def load_policy(self, policy_name):
         import yaml
 
         filenames = {
-            "Lab 1": "lab1-github-only-no-filesystem.yaml",
-            "GitHub-only network": "lab1-github-only-no-filesystem.yaml",
+            "Lab 1": "lab1-github-only-baseline-filesystem.yaml",
+            "GitHub-only network": "lab1-github-only-baseline-filesystem.yaml",
             "webroot-only filesystem": "lab2-webroot-only.yaml",
         }
         filename = filenames.get(policy_name)
@@ -137,11 +148,15 @@ class LabChecks:
 
     def evaluate_filesystem_write(self, path):
         policy = self.context.lab_state["policy"]["filesystem_policy"]
-        candidate = PurePosixPath(path).as_posix()
-        allowed = any(
-            candidate == root or candidate.startswith(root.rstrip("/") + "/")
-            for root in policy.get("read_write", [])
-        )
+        candidate_path = PurePosixPath(path)
+        if ".." in candidate_path.parts:
+            allowed = False
+        else:
+            candidate = candidate_path.as_posix()
+            allowed = any(
+                candidate == root or candidate.startswith(root.rstrip("/") + "/")
+                for root in policy.get("read_write", [])
+            )
         self.context.lab_state["filesystem_action"] = (
             "allowed" if allowed else "denied"
         )
@@ -149,11 +164,11 @@ class LabChecks:
     def assert_filesystem_action(self, status):
         assert self.context.lab_state["filesystem_action"] == status
 
-    def assert_empty_filesystem_paths(self):
+    def assert_baseline_filesystem_posture(self):
         filesystem = self.context.lab_state["policy"]["filesystem_policy"]
-        assert filesystem["include_workdir"] is False
-        assert filesystem["read_only"] == []
-        assert filesystem["read_write"] == []
+        assert filesystem["include_workdir"] is True
+        assert "/tmp" in filesystem["read_write"]
+        assert "/usr" in filesystem["read_only"]
 
     def _evaluate_network(self, binary, host, method):
         policy = self.context.lab_state["policy"]
@@ -201,11 +216,16 @@ class LabChecks:
                 + (root / "infra/aws/launch-cpu.sh").read_text(encoding="utf-8")
             )
         elif configuration == "GPU deployment":
-            path = (
-                Path(__file__).parents[3]
-                / "docs/superpowers/specs/2026-08-18-openshell-four-lab-design.md"
+            root = Path(__file__).parents[3]
+            paths = (
+                root / "infra/aws/gpu-lib.sh",
+                root / "infra/aws/start-gpu.sh",
+                root / "labs/lab4/configure-vllm.sh",
+                root / "labs/lab4/configure-openshell.sh",
             )
-            self.context.lab_state["gpu_config"] = path.read_text(encoding="utf-8")
+            self.context.lab_state["gpu_config"] = "\n".join(
+                path.read_text(encoding="utf-8") for path in paths
+            )
         else:
             raise AssertionError(f"configuration not yet implemented: {configuration}")
 
@@ -220,6 +240,7 @@ class LabChecks:
                 self.context.lab_state["containerfile"],
                 re.MULTILINE,
             )
+            assert users, "Containerfile must declare a USER directive"
             self.context.lab_state["image_user"] = users[-1]
         elif subject == "filesystem posture":
             self.context.lab_state["filesystem_evaluated"] = True
@@ -240,11 +261,12 @@ class LabChecks:
             text = self.context.lab_state["gpu_config"]
             required = (
                 "g6e.12xlarge",
-                "four NVIDIA L40S",
                 "Qwen/Qwen3.6-27B",
-                "unquantized BF16",
-                "Tensor parallelism: 4",
-                "32,768 tokens",
+                "--dtype bfloat16",
+                "--tensor-parallel-size 4",
+                "--max-model-len 32768",
+                "nvidia-smi",
+                "-eq 4",
             )
             self.context.lab_state["gpu_settings_valid"] = all(
                 item in text for item in required
@@ -261,8 +283,23 @@ class LabChecks:
 
     def assert_managed_request(self):
         request = self.context.lab_state["request"]
-        assert MODEL_URL == "https://inference.local/v1/chat/completions"
-        assert not {"model", "api_key", "authorization"}.intersection(request)
+        forbidden_keys = {"model", "api_key", "authorization", "x-api-key"}
+
+        def contains_forbidden_key(value):
+            if isinstance(value, dict):
+                return any(
+                    str(key).lower() in forbidden_keys
+                    or contains_forbidden_key(item)
+                    for key, item in value.items()
+                )
+            if isinstance(value, list):
+                return any(contains_forbidden_key(item) for item in value)
+            return False
+
+        if MODEL_URL != "https://inference.local/v1/chat/completions":
+            raise AssertionError(f"unexpected managed inference URL: {MODEL_URL}")
+        if contains_forbidden_key(request):
+            raise AssertionError("managed request contains a model or credential field")
 
     def assert_nonroot_image(self):
         user, group = self.context.lab_state["image_user"].split(":", 1)

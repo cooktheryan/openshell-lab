@@ -1,0 +1,51 @@
+{
+  "active_version": 2,
+  "config_revision": 9844123347061460325,
+  "hash": "da568157371d39eeb00635b418967cf22250d2680ab5397e4738c01d023ad18e",
+  "policy": {
+    "filesystem_policy": {
+      "include_workdir": false,
+      "read_only": [
+        "/usr",
+        "/lib64",
+        "/etc",
+        "/proc",
+        "/dev/urandom",
+        "/opt/openshell-lab"
+      ],
+      "read_write": [
+        "/var/www/html",
+        "/tmp",
+        "/dev/null"
+      ]
+    },
+    "landlock": {
+      "compatibility": "hard_requirement"
+    },
+    "network_policies": {
+      "github_api_readonly": {
+        "binaries": [
+          {
+            "path": "/usr/bin/curl"
+          }
+        ],
+        "endpoints": [
+          {
+            "access": "read-only",
+            "enforcement": "enforce",
+            "host": "api.github.com",
+            "port": 443,
+            "protocol": "rest"
+          }
+        ],
+        "name": "github-api-readonly"
+      }
+    },
+    "version": 1
+  },
+  "policy_source": "sandbox",
+  "sandbox": "openshell-lab3",
+  "scope": "sandbox",
+  "status": "effective",
+  "version": 2
+}

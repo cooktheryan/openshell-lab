@@ -28,6 +28,7 @@ scan_rule() {
 
 scan_rule aws-access-key 'AKIA[0-9A-Z]{16}'
 scan_rule openai-secret 'sk-[A-Za-z0-9_-]{20,}'
+scan_rule github-token '(?:github_pat_[A-Za-z0-9_]{20,}|gh[opusr]_[A-Za-z0-9_]{20,})'
 scan_rule private-key-marker '-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----'
 
 if test "$found" -ne 0; then

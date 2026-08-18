@@ -11,6 +11,10 @@ POLICIES = ROOT / "policies"
 
 
 class Lab3ArtifactTests(unittest.TestCase):
+    def test_run_waits_for_async_sandbox_deletion(self):
+        text = (LAB / "run.sh").read_text(encoding="utf-8")
+        self.assertIn("while openshell sandbox list --names", text)
+
     @classmethod
     def setUpClass(cls):
         cls.deny_path = POLICIES / "lab3-network-deny.yaml"
@@ -23,7 +27,10 @@ class Lab3ArtifactTests(unittest.TestCase):
     def test_both_policies_retain_identical_lab2_static_posture(self):
         for key in ("version", "filesystem_policy", "landlock"):
             self.assertEqual(self.deny[key], self.allow[key])
-        self.assertEqual(["/var/www/html"], self.deny["filesystem_policy"]["read_write"])
+        self.assertEqual(
+            ["/var/www/html", "/tmp", "/dev/null"],
+            self.deny["filesystem_policy"]["read_write"],
+        )
         self.assertEqual("hard_requirement", self.deny["landlock"]["compatibility"])
 
     def test_deny_has_no_network_capability(self):
@@ -47,6 +54,8 @@ class Lab3ArtifactTests(unittest.TestCase):
 
     def test_run_uses_reviewed_webroot_bind(self):
         text = (LAB / "run.sh").read_text(encoding="utf-8")
+        self.assertIn("--forward 127.0.0.1:18080", text)
+        self.assertIn("python3 -m http.server 18080", text)
         line = next(line for line in text.splitlines() if line.startswith("DRIVER_CONFIG="))
         config = json.loads(line.split("=", 1)[1].strip("'"))
         mounts = config["podman"]["mounts"]
@@ -60,6 +69,10 @@ class Lab3ArtifactTests(unittest.TestCase):
         combined = (LAB / "build.sh").read_text() + (LAB / "verify.sh").read_text()
         self.assertIn(".Config.User", combined)
         self.assertIn("1500:1500", combined)
+
+    def test_verification_leaves_the_live_sandbox_running(self):
+        text = (LAB / "verify.sh").read_text(encoding="utf-8")
+        self.assertNotIn('sandbox delete "$SANDBOX"', text)
 
 
 if __name__ == "__main__":

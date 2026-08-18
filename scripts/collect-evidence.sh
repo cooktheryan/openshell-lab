@@ -23,7 +23,7 @@ SSH_OPTIONS=(
 )
 
 remote() {
-    ssh "${SSH_OPTIONS[@]}" "$SSH_USER@$PUBLIC_IP" "$@"
+    ssh -n "${SSH_OPTIONS[@]}" "$SSH_USER@$PUBLIC_IP" "$@"
 }
 
 redact() {

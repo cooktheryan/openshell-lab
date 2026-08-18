@@ -59,8 +59,15 @@ mv "$temporary" "$config"
 systemctl --user enable openshell-gateway
 systemctl --user restart openshell-gateway
 
-if ! openshell status >/dev/null 2>&1; then
+if ! openshell gateway list --output json | jq -e \
+    '.[] | select(.name == "openshell")' >/dev/null; then
     openshell gateway add --local https://127.0.0.1:17670
 fi
+for _ in $(seq 1 30); do
+    if openshell status >/dev/null 2>&1; then
+        break
+    fi
+    sleep 2
+done
 openshell status
 openshell whoami

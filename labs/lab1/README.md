@@ -1,8 +1,11 @@
 # Lab 1: GitHub-only network access
 
-This lab runs the merge-report agent through OpenShell with no filesystem
-restriction. Its enforced network policy permits only read-only HTTPS requests
-to `api.github.com`, and only when `/usr/bin/curl` makes the request.
+This lab runs the merge-report agent through OpenShell with its baseline
+filesystem posture. The workdir and `/tmp` remain writable; there is no
+task-specific webroot confinement yet. OpenShell adds minimum runtime paths
+when proxy-enforced networking is active, so a literal zero-rule Landlock
+configuration is not supported. The enforced network policy permits only
+read-only HTTPS requests to `api.github.com`, and only for `/usr/bin/curl`.
 
 On the RHEL host, configure the model route once and run the lab:
 

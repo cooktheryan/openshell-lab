@@ -3,12 +3,12 @@ Feature: OpenShell agent controls
   Each lab demonstrates an explicit network and filesystem security posture.
 
   @state-driven
-  Rule: While Lab 1 is active, the OpenShell sandbox shall apply no Landlock filesystem rules.
+  Rule: While Lab 1 is active, the OpenShell sandbox shall retain its baseline writable workdir and temporary-directory posture.
 
-    Scenario: Lab 1 leaves filesystem writes unrestricted
+    Scenario: Lab 1 uses the OpenShell baseline filesystem posture
       Given the "Lab 1" policy is loaded
       When the "filesystem posture" is evaluated
-      Then the effective filesystem path set should be empty
+      Then the filesystem posture should include the workdir and temporary directory
 
   @state-driven
   Rule: While the report agent uses ordinary egress, OpenShell shall allow only read-only GitHub API access by the designated curl binary.
@@ -30,11 +30,16 @@ Feature: OpenShell agent controls
         | mutate the GitHub API    |
 
   @state-driven
-  Rule: While filesystem confinement is active, OpenShell shall allow agent writes only beneath /var/www/html.
+  Rule: While filesystem confinement is active, OpenShell shall allow persistent agent writes only beneath /var/www/html and retain bounded runtime scratch paths.
 
     Scenario: The report is written to the publication directory
       Given the "webroot-only filesystem" policy is loaded
       When the report agent writes beneath "/var/www/html"
+      Then the filesystem action should be "allowed"
+
+    Scenario: Temporary runtime state is writable
+      Given the "webroot-only filesystem" policy is loaded
+      When the report agent writes beneath "/tmp"
       Then the filesystem action should be "allowed"
 
     Scenario Outline: A non-publication write is denied
@@ -44,10 +49,10 @@ Feature: OpenShell agent controls
 
       Examples: Paths outside the publication directory
         | path     |
-        | /tmp     |
         | /sandbox |
         | /home    |
         | /etc     |
+        | /tmp/../etc |
 
   @ubiquitous
   Rule: The containerized report agent shall run with a non-root OCI identity.

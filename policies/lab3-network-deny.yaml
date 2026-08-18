@@ -8,10 +8,11 @@ filesystem_policy:
     - /etc
     - /proc
     - /dev/urandom
-    - /dev/null
     - /opt/openshell-lab
   read_write:
     - /var/www/html
+    - /tmp
+    - /dev/null
 
 landlock:
   compatibility: hard_requirement

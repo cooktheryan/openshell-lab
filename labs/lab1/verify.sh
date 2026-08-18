@@ -36,5 +36,7 @@ openshell sandbox exec --name "$SANDBOX" --no-tty -- \
     /usr/bin/touch /tmp/lab1-tmp-write-allowed
 
 logs=$(openshell logs "$SANDBOX" --source sandbox -n 500)
-grep -F "Landlock filesystem sandbox skipped: no paths configured" <<<"$logs" >/dev/null
+grep -F "Landlock ruleset built" <<<"$logs" >/dev/null
+openshell policy get "$SANDBOX" --full --output json | \
+    grep -F '"include_workdir": true' >/dev/null
 printf 'lab1 verification passed\n'

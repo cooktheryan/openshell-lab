@@ -6,24 +6,36 @@ ROOT=$(cd -- "$LAB_DIR/../.." && pwd)
 SANDBOX="openshell-lab2"
 POLICY="$ROOT/policies/lab2-webroot-only.yaml"
 DRIVER_CONFIG='{"podman":{"mounts":[{"type":"bind","source":"/var/www/html/openshell-lab","target":"/var/www/html","read_only":false,"selinux_label":"private"}]}}'
+IMAGE="localhost/openshell-lab-agent:lab2"
+
+podman build --tag "$IMAGE" --file "$ROOT/container/Containerfile" "$ROOT" >/dev/null
+[[ $(podman image inspect "$IMAGE" --format '{{.Config.User}}') == "1500:1500" ]]
 
 if openshell sandbox list --names | grep -Fx "$SANDBOX" >/dev/null; then
     openshell sandbox delete "$SANDBOX" >/dev/null
 fi
+delete_wait=60
+while openshell sandbox list --names | grep -Fx "$SANDBOX" >/dev/null; do
+    ((delete_wait--)) || {
+        printf 'sandbox deletion timed out: %s\n' "$SANDBOX" >&2
+        exit 1
+    }
+    sleep 1
+done
 
 openshell sandbox create \
     --name "$SANDBOX" \
+    --from "$IMAGE" \
     --policy "$POLICY" \
     --driver-config-json "$DRIVER_CONFIG" \
-    --upload "$ROOT/src:/opt/openshell-lab" \
     --forward 127.0.0.1:18080 \
     --no-tty \
     -- /bin/true >/dev/null
 
 openshell sandbox exec \
     --name "$SANDBOX" \
+    --no-tty \
     --workdir /opt/openshell-lab \
-    --env PYTHONPATH=/opt/openshell-lab/src \
     --env PYTHONDONTWRITEBYTECODE=1 \
     --timeout 900 \
     -- python3 -m openshell_lab.cli \
