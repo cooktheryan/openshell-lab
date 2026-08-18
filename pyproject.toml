@@ -7,7 +7,7 @@ name = "openshell-lab"
 version = "0.1.0"
 description = "Four progressive OpenShell security and inference labs"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["PyYAML>=6.0.2,<7"]
 
 [project.scripts]
 openshell-lab-report = "openshell_lab.cli:main"
