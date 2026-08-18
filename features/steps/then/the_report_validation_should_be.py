@@ -1,7 +1,7 @@
 from behave import then
-from behave.api.pending_step import StepNotImplementedError
+from features.steps.support.lab_checks import LabChecks
 
 
 @then('the report validation should be "{status}"')
 def step_report_status(context, status):
-    raise StepNotImplementedError(f"report status assertion is not implemented: {status}")
+    LabChecks(context).assert_report_status(status)

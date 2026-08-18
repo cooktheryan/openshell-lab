@@ -1,7 +1,7 @@
 from behave import then
-from behave.api.pending_step import StepNotImplementedError
+from features.steps.support.lab_checks import LabChecks
 
 
 @then("the selected evidence should be ordered from newest to oldest")
 def step_merge_order(context):
-    raise StepNotImplementedError("merge order assertion is not implemented")
+    LabChecks(context).assert_merge_order()

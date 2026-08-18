@@ -1,7 +1,7 @@
 from behave import then
-from behave.api.pending_step import StepNotImplementedError
+from features.steps.support.lab_checks import LabChecks
 
 
 @then("the selected evidence should contain five unique merged pull requests")
 def step_five_unique_merges(context):
-    raise StepNotImplementedError("merge count assertion is not implemented")
+    LabChecks(context).assert_five_unique_merges()

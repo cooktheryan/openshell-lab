@@ -1,7 +1,7 @@
 from behave import then
-from behave.api.pending_step import StepNotImplementedError
+from features.steps.support.lab_checks import LabChecks
 
 
 @then("only explicitly referenced issues should be associated")
 def step_explicit_issues(context):
-    raise StepNotImplementedError("issue association assertion is not implemented")
+    LabChecks(context).assert_explicit_issues()

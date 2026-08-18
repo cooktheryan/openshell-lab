@@ -1,0 +1,31 @@
+{
+  "50": {
+    "number": 50,
+    "title": "Gateway audit coverage",
+    "state": "open",
+    "html_url": "https://github.com/NVIDIA/OpenShell/issues/50",
+    "labels": [{"name": "area:gateway"}]
+  },
+  "51": {
+    "number": 51,
+    "title": "Earlier gateway change",
+    "state": "closed",
+    "html_url": "https://github.com/NVIDIA/OpenShell/pull/51",
+    "labels": [{"name": "area:gateway"}],
+    "pull_request": {"url": "https://api.github.com/repos/NVIDIA/OpenShell/pulls/51"}
+  },
+  "52": {
+    "number": 52,
+    "title": "Policy validation hardening",
+    "state": "open",
+    "html_url": "https://github.com/NVIDIA/OpenShell/issues/52",
+    "labels": [{"name": "topic:security"}]
+  },
+  "54": {
+    "number": 54,
+    "title": "Supervisor reliability workstream",
+    "state": "open",
+    "html_url": "https://github.com/NVIDIA/OpenShell/issues/54",
+    "labels": [{"name": "area:supervisor"}]
+  }
+}

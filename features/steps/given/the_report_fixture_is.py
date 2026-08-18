@@ -1,7 +1,7 @@
 from behave import given
-from behave.api.pending_step import StepNotImplementedError
+from features.steps.support.lab_checks import LabChecks
 
 
 @given('the report fixture is "{state}"')
 def step_report_fixture(context, state):
-    raise StepNotImplementedError(f"report fixture is not implemented: {state}")
+    LabChecks(context).load_report_fixture(state)
