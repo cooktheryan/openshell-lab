@@ -1,0 +1,6 @@
+name=quay.io/aipcc/agentic-ci/openshell
+tag=0.3.36
+digest=sha256:06a978ed76d32f2341f9a36271a5ce21cf64a9a562b0eb04d0d9eb1aeb23729f
+created=2026-08-17T20:56:22.295102137Z
+architecture=amd64
+resolved_at=2026-08-18T19:10:00Z

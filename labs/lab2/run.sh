@@ -24,6 +24,7 @@ openshell sandbox exec \
     --name "$SANDBOX" \
     --workdir /opt/openshell-lab \
     --env PYTHONPATH=/opt/openshell-lab/src \
+    --env PYTHONDONTWRITEBYTECODE=1 \
     --timeout 900 \
     -- python3 -m openshell_lab.cli \
         --output /var/www/html/nvidia-openshell-last-5-merges.md

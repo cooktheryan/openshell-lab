@@ -1,7 +1,7 @@
 from behave import then
-from behave.api.pending_step import StepNotImplementedError
+from features.steps.support.lab_checks import LabChecks
 
 
 @then("the image identity should be non-root")
 def step_non_root_image(context):
-    raise StepNotImplementedError("image identity assertion is not implemented")
+    LabChecks(context).assert_nonroot_image()

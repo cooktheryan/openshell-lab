@@ -1,8 +1,7 @@
 import json
 from pathlib import Path
 from pathlib import PurePosixPath
-
-import yaml
+import re
 
 from openshell_lab.github_evidence import (
     build_evidence,
@@ -121,6 +120,8 @@ class LabChecks:
         assert self.context.lab_state["report_status"] == status
 
     def load_policy(self, policy_name):
+        import yaml
+
         filenames = {
             "Lab 1": "lab1-github-only-no-filesystem.yaml",
             "GitHub-only network": "lab1-github-only-no-filesystem.yaml",
@@ -188,18 +189,37 @@ class LabChecks:
         assert self.context.lab_state["network_action"] == status
 
     def load_configuration(self, configuration):
-        if configuration != "managed inference route":
+        if configuration == "managed inference route":
+            self.context.lab_state["configuration"] = configuration
+        elif configuration == "application image metadata":
+            path = Path(__file__).parents[3] / "container" / "Containerfile"
+            self.context.lab_state["containerfile"] = path.read_text(encoding="utf-8")
+        else:
             raise AssertionError(f"configuration not yet implemented: {configuration}")
-        self.context.lab_state["configuration"] = configuration
 
     def evaluate_subject(self, subject):
-        if subject != "model request":
+        if subject == "model request":
+            self.context.lab_state["request"] = build_chat_request(
+                [{"role": "user", "content": "report"}]
+            )
+        elif subject == "image identity":
+            users = re.findall(
+                r"^USER\s+([^\s]+)$",
+                self.context.lab_state["containerfile"],
+                re.MULTILINE,
+            )
+            self.context.lab_state["image_user"] = users[-1]
+        elif subject == "filesystem posture":
+            self.context.lab_state["filesystem_evaluated"] = True
+        else:
             raise AssertionError(f"subject not yet implemented: {subject}")
-        self.context.lab_state["request"] = build_chat_request(
-            [{"role": "user", "content": "report"}]
-        )
 
     def assert_managed_request(self):
         request = self.context.lab_state["request"]
         assert MODEL_URL == "https://inference.local/v1/chat/completions"
         assert not {"model", "api_key", "authorization"}.intersection(request)
+
+    def assert_nonroot_image(self):
+        user, group = self.context.lab_state["image_user"].split(":", 1)
+        assert user.isdigit() and group.isdigit()
+        assert int(user) > 0 and int(group) > 0

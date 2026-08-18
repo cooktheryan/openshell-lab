@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+LAB_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd -- "$LAB_DIR/../.." && pwd)
+SANDBOX="openshell-lab3"
+DENY_POLICY="$ROOT/policies/lab3-network-deny.yaml"
+ALLOW_POLICY="$ROOT/policies/lab3-github-allow.yaml"
+DRIVER_CONFIG='{"podman":{"mounts":[{"type":"bind","source":"/var/www/html/openshell-lab","target":"/var/www/html","read_only":false,"selinux_label":"private"}]}}'
+IMAGE=$(awk -F= '$1 == "IMAGE" {print substr($0, index($0, "=") + 1)}' "$ROOT/state/lab3-image.env")
+[[ "$IMAGE" =~ ^localhost/openshell-lab-agent:[0-9a-f]{7,12}$ ]] || {
+    printf 'Lab 3 image state is missing or invalid; run build.sh first\n' >&2
+    exit 1
+}
+
+if openshell sandbox list --names | grep -Fx "$SANDBOX" >/dev/null; then
+    openshell sandbox delete "$SANDBOX" >/dev/null
+fi
+podman unshare rm -f /var/www/html/openshell-lab/nvidia-openshell-last-5-merges.md
+
+openshell sandbox create \
+    --name "$SANDBOX" \
+    --from "$IMAGE" \
+    --policy "$DENY_POLICY" \
+    --driver-config-json "$DRIVER_CONFIG" \
+    --no-tty \
+    -- /bin/true >/dev/null
+
+mkdir -p "$ROOT/evidence/lab3"
+openshell policy get "$SANDBOX" --base --output json \
+    >"$ROOT/evidence/lab3/policy-deny.json"
+if openshell sandbox exec \
+    --name "$SANDBOX" \
+    --workdir /opt/openshell-lab \
+    --timeout 900 \
+    -- python3 -m openshell_lab.cli \
+        --output /var/www/html/nvidia-openshell-last-5-merges.md; then
+    printf 'expected denied report run to fail, but it succeeded\n' >&2
+    exit 1
+fi
+printf 'expected denied report run was blocked\n'
+
+openshell policy set "$SANDBOX" --policy "$ALLOW_POLICY" --wait --timeout 120
+openshell policy get "$SANDBOX" --base --output json \
+    >"$ROOT/evidence/lab3/policy-allow.json"
+openshell sandbox exec \
+    --name "$SANDBOX" \
+    --workdir /opt/openshell-lab \
+    --timeout 900 \
+    -- python3 -m openshell_lab.cli \
+        --output /var/www/html/nvidia-openshell-last-5-merges.md
+printf 'lab3 deny-then-allow run passed\n'
