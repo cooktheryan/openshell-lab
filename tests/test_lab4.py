@@ -59,6 +59,11 @@ class Lab4ArtifactTests(unittest.TestCase):
         ):
             self.assertTrue((LAB / name).is_file(), name)
 
+    def test_verifier_reads_owner_only_report_through_http(self):
+        text = (LAB / "verify.sh").read_text(encoding="utf-8")
+        self.assertIn("published_report=$(mktemp)", text)
+        self.assertNotIn('grep -F \'# NVIDIA/OpenShell\' "$REPORT"', text)
+
 
 if __name__ == "__main__":
     unittest.main()
