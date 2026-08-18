@@ -51,8 +51,8 @@ class GitHubEvidenceTests(unittest.TestCase):
         self.assertEqual([42], extract_issue_numbers(body, pr_number=100))
 
     def test_one_relationship_keyword_can_govern_multiple_issue_references(self):
-        body = "Fixes #40, #41 and #42. Example #43."
-        self.assertEqual([40, 41, 42], extract_issue_numbers(body, pr_number=100))
+        body = "Fixes #40, #41 and #42. Related: #44. Example #43."
+        self.assertEqual([40, 41, 42, 44], extract_issue_numbers(body, pr_number=100))
 
     def test_paginates_until_updated_time_proves_merge_cutoff(self):
         first_page = [

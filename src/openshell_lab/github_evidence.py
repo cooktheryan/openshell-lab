@@ -140,13 +140,13 @@ def select_recent_merges(pulls: list[dict], limit: int = 5) -> list[dict]:
 
 
 _RELATIONSHIP = re.compile(
-    r"(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?|relate[sd]?\s+to|part\s+of|"
+    r"(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?|relate[sd]?(?:\s+to)?\s*:?|part\s+of|"
     r"follows?|follow-up\s+to|depends\s+on|blocked\s+by)\s*$",
     re.IGNORECASE,
 )
 _NEGATED_RELATIONSHIP = re.compile(
     r"(?:does\s+not|did\s+not|not)\s+"
-    r"(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?|relate[sd]?\s+to|part\s+of|"
+    r"(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?|relate[sd]?(?:\s+to)?\s*:?|part\s+of|"
     r"follows?|follow-up\s+to|depends?\s+on|blocked\s+by)\s*$",
     re.IGNORECASE,
 )
