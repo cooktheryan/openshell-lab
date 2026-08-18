@@ -194,6 +194,18 @@ class LabChecks:
         elif configuration == "application image metadata":
             path = Path(__file__).parents[3] / "container" / "Containerfile"
             self.context.lab_state["containerfile"] = path.read_text(encoding="utf-8")
+        elif configuration == "CPU launch":
+            root = Path(__file__).parents[3]
+            self.context.lab_state["cpu_config"] = (
+                (root / "infra/aws/lib.sh").read_text(encoding="utf-8")
+                + (root / "infra/aws/launch-cpu.sh").read_text(encoding="utf-8")
+            )
+        elif configuration == "GPU deployment":
+            path = (
+                Path(__file__).parents[3]
+                / "docs/superpowers/specs/2026-08-18-openshell-four-lab-design.md"
+            )
+            self.context.lab_state["gpu_config"] = path.read_text(encoding="utf-8")
         else:
             raise AssertionError(f"configuration not yet implemented: {configuration}")
 
@@ -211,6 +223,39 @@ class LabChecks:
             self.context.lab_state["image_user"] = users[-1]
         elif subject == "filesystem posture":
             self.context.lab_state["filesystem_evaluated"] = True
+        elif subject == "CPU launch configuration":
+            text = self.context.lab_state["cpu_config"]
+            required = (
+                "us-east-1",
+                "ami-00adafae70b8029d8",
+                "t3.micro",
+                "rcook",
+                "wide",
+                "HttpTokens=required",
+            )
+            self.context.lab_state["cpu_settings_valid"] = all(
+                item in text for item in required
+            )
+        elif subject == "GPU inference configuration":
+            text = self.context.lab_state["gpu_config"]
+            required = (
+                "g6e.12xlarge",
+                "four NVIDIA L40S",
+                "Qwen/Qwen3.6-27B",
+                "unquantized BF16",
+                "Tensor parallelism: 4",
+                "32,768 tokens",
+            )
+            self.context.lab_state["gpu_settings_valid"] = all(
+                item in text for item in required
+            )
+        elif subject == "repository safety":
+            ignore = (
+                Path(__file__).parents[3] / ".gitignore"
+            ).read_text(encoding="utf-8").splitlines()
+            self.context.lab_state["artifact_excluded"] = (
+                self.context.lab_state["ignore_pattern"] in ignore
+            )
         else:
             raise AssertionError(f"subject not yet implemented: {subject}")
 
@@ -223,3 +268,25 @@ class LabChecks:
         user, group = self.context.lab_state["image_user"].split(":", 1)
         assert user.isdigit() and group.isdigit()
         assert int(user) > 0 and int(group) > 0
+
+    def load_candidate_artifact(self, artifact_type):
+        patterns = {
+            "environment file": ".env",
+            "SSH private key": "*.key",
+            "OpenShell database": "*.db",
+            "TLS private key": "**/tls/",
+            "model cache": ".cache/huggingface/",
+        }
+        try:
+            self.context.lab_state["ignore_pattern"] = patterns[artifact_type]
+        except KeyError as error:
+            raise AssertionError(f"unknown artifact type: {artifact_type}") from error
+
+    def assert_artifact_excluded(self):
+        assert self.context.lab_state["artifact_excluded"] is True
+
+    def assert_cpu_settings(self):
+        assert self.context.lab_state["cpu_settings_valid"] is True
+
+    def assert_gpu_settings(self):
+        assert self.context.lab_state["gpu_settings_valid"] is True

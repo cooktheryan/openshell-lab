@@ -1,7 +1,7 @@
 from behave import then
-from behave.api.pending_step import StepNotImplementedError
+from features.steps.support.lab_checks import LabChecks
 
 
 @then("the launch should use the approved CPU settings")
 def step_cpu_settings(context):
-    raise StepNotImplementedError("CPU settings assertion is not implemented")
+    LabChecks(context).assert_cpu_settings()

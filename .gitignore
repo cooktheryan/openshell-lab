@@ -12,6 +12,7 @@ __pycache__/
 state/
 evidence/raw/
 results/raw/
+review/ocr-*.json
 
 *.pem
 *.key

@@ -1,7 +1,7 @@
 from behave import given
-from behave.api.pending_step import StepNotImplementedError
+from features.steps.support.lab_checks import LabChecks
 
 
 @given('a candidate repository artifact of type "{artifact_type}"')
 def step_candidate_artifact(context, artifact_type):
-    raise StepNotImplementedError(f"artifact fixture is not implemented: {artifact_type}")
+    LabChecks(context).load_candidate_artifact(artifact_type)
