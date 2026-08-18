@@ -37,9 +37,14 @@
 - Create: `features/0002-openshell-controls.feature`
 - Create: `features/0003-aws-deployment.feature`
 - Create: `features/environment.py`
-- Create: `features/steps/given/lab_context.py`
-- Create: `features/steps/when/run_check.py`
-- Create: `features/steps/then/assert_result.py`
+- Create: `features/steps/__init__.py`
+- Create: `features/steps/given/__init__.py`
+- Create: `features/steps/given/the_lab_artifacts_are_available.py`
+- Create: `features/steps/when/__init__.py`
+- Create: `features/steps/when/the_lab_check_is_performed.py`
+- Create: `features/steps/then/__init__.py`
+- Create: `features/steps/then/the_lab_check_should_be.py`
+- Create: `features/steps/support/lab_checks.py`
 - Create: `tests/test_repository_safety.py`
 - Create: `scripts/scan-secrets.sh`
 
@@ -118,9 +123,7 @@ git commit --signoff -m "test: specify OpenShell lab behavior"
 - Create: `tests/fixtures/github/issues.json`
 - Create: `tests/test_github_evidence.py`
 - Create: `tests/test_report.py`
-- Modify: `features/steps/given/lab_context.py`
-- Modify: `features/steps/when/run_check.py`
-- Modify: `features/steps/then/assert_result.py`
+- Modify: `features/steps/support/lab_checks.py`
 
 **Interfaces:**
 - Produces: `select_recent_merges(pulls: list[dict], limit: int = 5) -> list[dict]`.
@@ -175,7 +178,7 @@ git commit --signoff -m "feat: collect merge evidence and validate reports"
 - Create: `tests/test_tool_agent.py`
 - Create: `tests/test_cli.py`
 - Modify: `pyproject.toml`
-- Modify: `features/steps/when/run_check.py`
+- Modify: `features/steps/support/lab_checks.py`
 
 **Interfaces:**
 - Produces: `build_chat_request(messages: list[dict]) -> dict`, deliberately omitting provider model and credentials.
@@ -228,7 +231,7 @@ git commit --signoff -m "feat: add bounded merge-report tool agent"
 - Create: `infra/remote/bootstrap-rhel10.sh`
 - Create: `tests/test_aws_scripts.py`
 - Create: `tests/test_bootstrap_scripts.py`
-- Modify: `features/steps/when/run_check.py`
+- Modify: `features/steps/support/lab_checks.py`
 
 **Interfaces:**
 - Produces: `state/cpu-connection.env` with non-secret region, instance ID, IPs, subnet, and an SSH-key path reference; mode `0600`, gitignored.
@@ -279,7 +282,7 @@ git commit --signoff -m "feat: automate RHEL OpenShell host lifecycle"
 - Create: `labs/lab1/verify.sh`
 - Create: `labs/lab1/README.md`
 - Create: `tests/test_lab1.py`
-- Modify: `features/steps/when/run_check.py`
+- Modify: `features/steps/support/lab_checks.py`
 
 **Interfaces:**
 - Consumes: `openshell-lab-report`, OpenShell CLI, and runtime `OPENAI_API_KEY`.
@@ -330,7 +333,7 @@ git commit --signoff -m "feat: add GitHub-only no-filesystem lab"
 - Create: `labs/lab2/README.md`
 - Create: `infra/remote/openshell-lab-httpd.conf`
 - Create: `tests/test_lab2.py`
-- Modify: `features/steps/when/run_check.py`
+- Modify: `features/steps/support/lab_checks.py`
 
 **Interfaces:**
 - Produces: host directory `/var/www/html/openshell-lab`, sandbox `openshell-lab2`, loopback report service, and an externally fetchable Markdown URL.
@@ -498,7 +501,7 @@ git commit --signoff -m "test: validate CPU OpenShell labs"
 - Create: `labs/lab4/verify.sh`
 - Create: `labs/lab4/README.md`
 - Create: `tests/test_lab4.py`
-- Modify: `features/steps/when/run_check.py`
+- Modify: `features/steps/support/lab_checks.py`
 
 **Interfaces:**
 - Produces vLLM service for `Qwen/Qwen3.6-27B` at the validated host endpoint.

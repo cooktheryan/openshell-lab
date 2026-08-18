@@ -1,0 +1,9 @@
+[project]
+name = "openshell-lab"
+version = "0.1.0"
+description = "Four progressive OpenShell security and inference labs"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+package = false
