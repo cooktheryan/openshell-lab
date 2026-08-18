@@ -1,7 +1,7 @@
 from behave import then
-from behave.api.pending_step import StepNotImplementedError
+from features.steps.support.lab_checks import LabChecks
 
 
 @then('the network action should be "{status}"')
 def step_network_status(context, status):
-    raise StepNotImplementedError(f"network assertion is not implemented: {status}")
+    LabChecks(context).assert_network_action(status)

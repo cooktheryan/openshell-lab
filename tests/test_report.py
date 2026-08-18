@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import stat
 
 from openshell_lab.github_evidence import build_evidence, select_recent_merges
 from openshell_lab.report import REPORT_TITLE, render_evidence_index, validate_markdown, write_report
@@ -78,6 +79,7 @@ class ReportTests(unittest.TestCase):
             write_report(report, self.valid_markdown())
             self.assertEqual(self.valid_markdown(), report.read_text(encoding="utf-8"))
             self.assertEqual([report], list(Path(directory).iterdir()))
+            self.assertEqual(0o644, stat.S_IMODE(report.stat().st_mode))
 
 
 if __name__ == "__main__":

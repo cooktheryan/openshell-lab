@@ -104,7 +104,7 @@ def write_report(path: Path | str, markdown: str) -> None:
             handle.write(markdown)
             handle.flush()
             os.fsync(handle.fileno())
-        os.chmod(temporary_name, 0o600)
+        os.chmod(temporary_name, 0o644)
         os.replace(temporary_name, destination)
     except BaseException:
         if temporary_name is not None:

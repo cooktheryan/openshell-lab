@@ -1,7 +1,7 @@
 from behave import when
-from behave.api.pending_step import StepNotImplementedError
+from features.steps.support.lab_checks import LabChecks
 
 
 @when('the agent attempts the network action "{action}"')
 def step_network_action(context, action):
-    raise StepNotImplementedError(f"network action is not implemented: {action}")
+    LabChecks(context).evaluate_network_action(action)

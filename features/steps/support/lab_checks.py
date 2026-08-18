@@ -1,5 +1,8 @@
 import json
 from pathlib import Path
+from pathlib import PurePosixPath
+
+import yaml
 
 from openshell_lab.github_evidence import (
     build_evidence,
@@ -7,6 +10,7 @@ from openshell_lab.github_evidence import (
     select_recent_merges,
 )
 from openshell_lab.report import REPORT_TITLE, validate_markdown
+from openshell_lab.tool_agent import MODEL_URL, build_chat_request
 
 
 FIXTURES = Path(__file__).parents[3] / "tests" / "fixtures" / "github"
@@ -115,3 +119,87 @@ class LabChecks:
 
     def assert_report_status(self, status):
         assert self.context.lab_state["report_status"] == status
+
+    def load_policy(self, policy_name):
+        filenames = {
+            "Lab 1": "lab1-github-only-no-filesystem.yaml",
+            "GitHub-only network": "lab1-github-only-no-filesystem.yaml",
+            "webroot-only filesystem": "lab2-webroot-only.yaml",
+        }
+        filename = filenames.get(policy_name)
+        if filename is None:
+            raise AssertionError(f"unknown policy fixture: {policy_name}")
+        path = Path(__file__).parents[3] / "policies" / filename
+        self.context.lab_state["policy"] = yaml.safe_load(
+            path.read_text(encoding="utf-8")
+        )
+
+    def evaluate_filesystem_write(self, path):
+        policy = self.context.lab_state["policy"]["filesystem_policy"]
+        candidate = PurePosixPath(path).as_posix()
+        allowed = any(
+            candidate == root or candidate.startswith(root.rstrip("/") + "/")
+            for root in policy.get("read_write", [])
+        )
+        self.context.lab_state["filesystem_action"] = (
+            "allowed" if allowed else "denied"
+        )
+
+    def assert_filesystem_action(self, status):
+        assert self.context.lab_state["filesystem_action"] == status
+
+    def assert_empty_filesystem_paths(self):
+        filesystem = self.context.lab_state["policy"]["filesystem_policy"]
+        assert filesystem["include_workdir"] is False
+        assert filesystem["read_only"] == []
+        assert filesystem["read_write"] == []
+
+    def _evaluate_network(self, binary, host, method):
+        policy = self.context.lab_state["policy"]
+        allowed = False
+        for entry in policy["network_policies"].values():
+            binary_match = {item["path"] for item in entry["binaries"]}
+            if binary not in binary_match:
+                continue
+            for endpoint in entry["endpoints"]:
+                if endpoint["host"] != host or endpoint["port"] != 443:
+                    continue
+                access = endpoint.get("access")
+                if access == "read-only" and method in {"GET", "HEAD", "OPTIONS"}:
+                    allowed = True
+        self.context.lab_state["network_action"] = "allowed" if allowed else "denied"
+
+    def evaluate_designated_github_read(self):
+        self._evaluate_network("/usr/bin/curl", "api.github.com", "GET")
+
+    def evaluate_network_action(self, action):
+        actions = {
+            "read a different host": ("/usr/bin/curl", "example.com", "GET"),
+            "read GitHub with Python": ("/usr/bin/python3", "api.github.com", "GET"),
+            "mutate the GitHub API": ("/usr/bin/curl", "api.github.com", "POST"),
+        }
+        try:
+            binary, host, method = actions[action]
+        except KeyError as error:
+            raise AssertionError(f"unknown network action: {action}") from error
+        self._evaluate_network(binary, host, method)
+
+    def assert_network_action(self, status):
+        assert self.context.lab_state["network_action"] == status
+
+    def load_configuration(self, configuration):
+        if configuration != "managed inference route":
+            raise AssertionError(f"configuration not yet implemented: {configuration}")
+        self.context.lab_state["configuration"] = configuration
+
+    def evaluate_subject(self, subject):
+        if subject != "model request":
+            raise AssertionError(f"subject not yet implemented: {subject}")
+        self.context.lab_state["request"] = build_chat_request(
+            [{"role": "user", "content": "report"}]
+        )
+
+    def assert_managed_request(self):
+        request = self.context.lab_state["request"]
+        assert MODEL_URL == "https://inference.local/v1/chat/completions"
+        assert not {"model", "api_key", "authorization"}.intersection(request)

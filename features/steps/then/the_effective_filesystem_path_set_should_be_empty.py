@@ -1,7 +1,7 @@
 from behave import then
-from behave.api.pending_step import StepNotImplementedError
+from features.steps.support.lab_checks import LabChecks
 
 
 @then("the effective filesystem path set should be empty")
 def step_empty_filesystem_paths(context):
-    raise StepNotImplementedError("filesystem policy assertion is not implemented")
+    LabChecks(context).assert_empty_filesystem_paths()

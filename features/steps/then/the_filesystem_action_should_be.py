@@ -1,7 +1,7 @@
 from behave import then
-from behave.api.pending_step import StepNotImplementedError
+from features.steps.support.lab_checks import LabChecks
 
 
 @then('the filesystem action should be "{status}"')
 def step_filesystem_status(context, status):
-    raise StepNotImplementedError(f"filesystem assertion is not implemented: {status}")
+    LabChecks(context).assert_filesystem_action(status)
