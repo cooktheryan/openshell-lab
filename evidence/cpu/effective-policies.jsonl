@@ -1,0 +1,103 @@
+{
+  "active_version": 1,
+  "config_revision": 7306130671484833720,
+  "hash": "db1c7115742dc1cc4e792e7c3512c73dedd565fadc4cb3f5b7e43b8f5b687917",
+  "policy": {
+    "filesystem_policy": {
+      "include_workdir": true,
+      "read_only": [
+        "/usr",
+        "/lib",
+        "/etc",
+        "/var/log",
+        "/proc",
+        "/dev/urandom"
+      ],
+      "read_write": [
+        "/tmp",
+        "/dev/null"
+      ]
+    },
+    "landlock": {
+      "compatibility": "best_effort"
+    },
+    "network_policies": {
+      "github_api_readonly": {
+        "binaries": [
+          {
+            "path": "/usr/bin/curl"
+          }
+        ],
+        "endpoints": [
+          {
+            "access": "read-only",
+            "enforcement": "enforce",
+            "host": "api.github.com",
+            "port": 443,
+            "protocol": "rest"
+          }
+        ],
+        "name": "github-api-readonly"
+      }
+    },
+    "version": 1
+  },
+  "policy_source": "sandbox",
+  "sandbox": "openshell-lab1",
+  "scope": "sandbox",
+  "status": "effective",
+  "version": 1
+}
+{
+  "active_version": 2,
+  "config_revision": 11498973057671022462,
+  "hash": "bfdf89a1da1949b3b55ef63a6a48f9467cfdc06b32bf7d07334f84e1c7cf8157",
+  "policy": {
+    "filesystem_policy": {
+      "include_workdir": false,
+      "read_only": [
+        "/usr",
+        "/lib64",
+        "/etc",
+        "/proc",
+        "/dev/urandom",
+        "/opt/openshell-lab",
+        "/lib",
+        "/var/log"
+      ],
+      "read_write": [
+        "/var/www/html",
+        "/tmp",
+        "/dev/null"
+      ]
+    },
+    "landlock": {
+      "compatibility": "hard_requirement"
+    },
+    "network_policies": {
+      "github_api_readonly": {
+        "binaries": [
+          {
+            "path": "/usr/bin/curl"
+          }
+        ],
+        "endpoints": [
+          {
+            "access": "read-only",
+            "enforcement": "enforce",
+            "host": "api.github.com",
+            "port": 443,
+            "protocol": "rest"
+          }
+        ],
+        "name": "github-api-readonly"
+      }
+    },
+    "version": 1
+  },
+  "policy_source": "sandbox",
+  "sandbox": "openshell-lab2",
+  "scope": "sandbox",
+  "status": "effective",
+  "version": 2
+}

@@ -1,5 +1,16 @@
 # OpenShell Four-Lab Demonstration Implementation Plan
 
+> Runtime reconciliation (2026-08-18): the executed RHEL 10 deployment showed
+> that proxy mode always enriches filesystem policy with an enforced Landlock
+> baseline. Labs therefore retain writable `/tmp` and `/dev/null`, Lab 1 also
+> includes its uploaded workdir, and persistent publication remains limited to
+> `/var/www/html` in Labs 2–4. Any older step below that expects a zero-rule
+> Landlock policy or denied `/tmp` write is superseded by the design document,
+> Gherkin scenarios, policy tests, and remote evidence. Lab 4 also uses
+> `host.openshell.internal` after a loopback vLLM preflight because the alias is
+> injected at the sandbox boundary and cannot be resolved by gateway-side
+> provider verification.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver and validate four reproducible OpenShell labs covering GitHub-only egress, filesystem confinement, a non-root Podman application image, and Qwen/vLLM managed inference.
@@ -12,11 +23,11 @@
 
 ## Global Constraints
 
-- Work only in `/Users/rcook/git/openshell-lab` locally and `/home/ec2-user/openshell-lab` remotely.
+- Work only in `/Users/rcook/git/openshell-lab` locally and `/home/ec2-user/git/openshell-lab` remotely.
 - Use RHEL 10 AMI `ami-00adafae70b8029d8`, `t3.micro`, On-Demand, in `us-east-1` for Labs 1–3.
 - Default the remote inference model to `gpt-5.5`; verify account availability and never silently substitute another model.
 - Permit ordinary sandbox egress only to read-only `api.github.com:443` requests made by `/usr/bin/curl`.
-- Lab 1 must apply an explicit Landlock no-op; Labs 2–4 must allow writes only to `/var/www/html`.
+- Lab 1 must apply the proxy-enriched Landlock baseline; Labs 2–4 must restrict persistent writes to `/var/www/html` while retaining `/tmp` and `/dev/null` runtime paths.
 - Use `landlock.compatibility: hard_requirement` for Labs 2–4.
 - Derive Lab 3 from a versioned, digest-pinned `quay.io/aipcc/agentic-ci/openshell` image and add a non-root OCI user.
 - Reuse `i-000d2fc821040d9e3` in `us-east-2` for Lab 4 unless inspection contradicts the validated GPU state.
@@ -37,9 +48,14 @@
 - Create: `features/0002-openshell-controls.feature`
 - Create: `features/0003-aws-deployment.feature`
 - Create: `features/environment.py`
-- Create: `features/steps/given/lab_context.py`
-- Create: `features/steps/when/run_check.py`
-- Create: `features/steps/then/assert_result.py`
+- Create: `features/steps/__init__.py`
+- Create: `features/steps/given/__init__.py`
+- Create: `features/steps/given/the_lab_artifacts_are_available.py`
+- Create: `features/steps/when/__init__.py`
+- Create: `features/steps/when/the_lab_check_is_performed.py`
+- Create: `features/steps/then/__init__.py`
+- Create: `features/steps/then/the_lab_check_should_be.py`
+- Create: `features/steps/support/lab_checks.py`
 - Create: `tests/test_repository_safety.py`
 - Create: `scripts/scan-secrets.sh`
 
@@ -118,9 +134,7 @@ git commit --signoff -m "test: specify OpenShell lab behavior"
 - Create: `tests/fixtures/github/issues.json`
 - Create: `tests/test_github_evidence.py`
 - Create: `tests/test_report.py`
-- Modify: `features/steps/given/lab_context.py`
-- Modify: `features/steps/when/run_check.py`
-- Modify: `features/steps/then/assert_result.py`
+- Modify: `features/steps/support/lab_checks.py`
 
 **Interfaces:**
 - Produces: `select_recent_merges(pulls: list[dict], limit: int = 5) -> list[dict]`.
@@ -175,13 +189,13 @@ git commit --signoff -m "feat: collect merge evidence and validate reports"
 - Create: `tests/test_tool_agent.py`
 - Create: `tests/test_cli.py`
 - Modify: `pyproject.toml`
-- Modify: `features/steps/when/run_check.py`
+- Modify: `features/steps/support/lab_checks.py`
 
 **Interfaces:**
 - Produces: `build_chat_request(messages: list[dict]) -> dict`, deliberately omitting provider model and credentials.
 - Produces: `dispatch_tool(name: str, arguments: dict, state: ToolState) -> dict`.
 - Produces: `run_tool_loop(report_path: pathlib.Path, curl_bin: str = "/usr/bin/curl", max_tool_calls: int = 16) -> dict`.
-- Produces CLI: `openshell-lab-report --output PATH [--curl-bin PATH]`.
+- Produces CLI: `openshell-lab-report --output PATH`; the executable remains pinned to `/usr/bin/curl`.
 
 - [ ] **Step 1: Write failing tool-loop tests**
 
@@ -228,7 +242,7 @@ git commit --signoff -m "feat: add bounded merge-report tool agent"
 - Create: `infra/remote/bootstrap-rhel10.sh`
 - Create: `tests/test_aws_scripts.py`
 - Create: `tests/test_bootstrap_scripts.py`
-- Modify: `features/steps/when/run_check.py`
+- Modify: `features/steps/support/lab_checks.py`
 
 **Interfaces:**
 - Produces: `state/cpu-connection.env` with non-secret region, instance ID, IPs, subnet, and an SSH-key path reference; mode `0600`, gitignored.
@@ -279,7 +293,7 @@ git commit --signoff -m "feat: automate RHEL OpenShell host lifecycle"
 - Create: `labs/lab1/verify.sh`
 - Create: `labs/lab1/README.md`
 - Create: `tests/test_lab1.py`
-- Modify: `features/steps/when/run_check.py`
+- Modify: `features/steps/support/lab_checks.py`
 
 **Interfaces:**
 - Consumes: `openshell-lab-report`, OpenShell CLI, and runtime `OPENAI_API_KEY`.
@@ -330,7 +344,7 @@ git commit --signoff -m "feat: add GitHub-only no-filesystem lab"
 - Create: `labs/lab2/README.md`
 - Create: `infra/remote/openshell-lab-httpd.conf`
 - Create: `tests/test_lab2.py`
-- Modify: `features/steps/when/run_check.py`
+- Modify: `features/steps/support/lab_checks.py`
 
 **Interfaces:**
 - Produces: host directory `/var/www/html/openshell-lab`, sandbox `openshell-lab2`, loopback report service, and an externally fetchable Markdown URL.
@@ -498,7 +512,7 @@ git commit --signoff -m "test: validate CPU OpenShell labs"
 - Create: `labs/lab4/verify.sh`
 - Create: `labs/lab4/README.md`
 - Create: `tests/test_lab4.py`
-- Modify: `features/steps/when/run_check.py`
+- Modify: `features/steps/support/lab_checks.py`
 
 **Interfaces:**
 - Produces vLLM service for `Qwen/Qwen3.6-27B` at the validated host endpoint.

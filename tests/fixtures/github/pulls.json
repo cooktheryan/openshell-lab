@@ -1,0 +1,72 @@
+[
+  {
+    "number": 105,
+    "title": "Add gateway audit event",
+    "body": "Fixes #50 and follows #51.",
+    "merged_at": "2026-08-18T05:00:00Z",
+    "html_url": "https://github.com/NVIDIA/OpenShell/pull/105",
+    "user": {"login": "alice"},
+    "labels": [{"name": "area:gateway"}],
+    "milestone": {"title": "Gateway hardening"}
+  },
+  {
+    "number": 104,
+    "title": "Closed without merge",
+    "body": "Not merged.",
+    "merged_at": null,
+    "html_url": "https://github.com/NVIDIA/OpenShell/pull/104",
+    "user": {"login": "nobody"},
+    "labels": [],
+    "milestone": null
+  },
+  {
+    "number": 103,
+    "title": "Tighten policy validation",
+    "body": "Related to #52. Duplicate reference #52.",
+    "merged_at": "2026-08-18T04:00:00Z",
+    "html_url": "https://github.com/NVIDIA/OpenShell/pull/103",
+    "user": {"login": "bob"},
+    "labels": [{"name": "topic:security"}],
+    "milestone": null
+  },
+  {
+    "number": 102,
+    "title": "Document Podman callbacks",
+    "body": "Mentions issue 53 without an explicit reference.",
+    "merged_at": "2026-08-18T03:00:00Z",
+    "html_url": "https://github.com/NVIDIA/OpenShell/pull/102",
+    "user": {"login": "carol"},
+    "labels": [{"name": "area:docs"}],
+    "milestone": null
+  },
+  {
+    "number": 101,
+    "title": "Improve supervisor startup",
+    "body": "Part of #54.",
+    "merged_at": "2026-08-18T02:00:00Z",
+    "html_url": "https://github.com/NVIDIA/OpenShell/pull/101",
+    "user": {"login": "dave"},
+    "labels": [],
+    "milestone": null
+  },
+  {
+    "number": 100,
+    "title": "Update CLI output",
+    "body": "No linked issue.",
+    "merged_at": "2026-08-18T01:00:00Z",
+    "html_url": "https://github.com/NVIDIA/OpenShell/pull/100",
+    "user": {"login": "erin"},
+    "labels": [{"name": "area:cli"}],
+    "milestone": null
+  },
+  {
+    "number": 99,
+    "title": "Older merge",
+    "body": "Fixes #55.",
+    "merged_at": "2026-08-17T23:00:00Z",
+    "html_url": "https://github.com/NVIDIA/OpenShell/pull/99",
+    "user": {"login": "frank"},
+    "labels": [],
+    "milestone": null
+  }
+]

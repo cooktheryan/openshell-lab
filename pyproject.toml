@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openshell-lab"
+version = "0.1.0"
+description = "Four progressive OpenShell security and inference labs"
+requires-python = ">=3.11"
+dependencies = ["PyYAML>=6.0.2,<7"]
+
+[project.scripts]
+openshell-lab-report = "openshell_lab.cli:main"
+
+[tool.uv]
+package = true

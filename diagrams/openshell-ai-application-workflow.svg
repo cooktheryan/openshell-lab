@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">AI application request flow through OpenShell</title>
+  <desc id="desc">A numbered request flow from an operator to a sandboxed AI application, through OpenShell managed inference to Qwen on vLLM, through policy-controlled GitHub tools, and into a useful Apache-published Markdown report.</desc>
+  <defs>
+    <marker id="blue-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#2563eb"/></marker>
+    <marker id="purple-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#7c3aed"/></marker>
+    <marker id="green-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#15803d"/></marker>
+    <marker id="amber-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#b45309"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.12"/></filter>
+    <style>
+      text{font-family:Arial,sans-serif;fill:#1e293b}.title{font-size:34px;font-weight:700}.subtitle{font-size:20px;fill:#64748b}.h2{font-size:24px;font-weight:700}.h3{font-size:21px;font-weight:700}.body{font-size:18px}.small{font-size:16px}.tiny{font-size:14px}.center{text-anchor:middle}.box{stroke-width:2}.round{rx:15;ry:15}.step{font-size:17px;font-weight:700}.muted{fill:#475569}
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#ffffff"/>
+  <text class="title" x="40" y="54">AI application request flow through OpenShell</text>
+  <text class="subtitle" x="42" y="88">Operator request → managed local inference → controlled GitHub tools → Apache-published Markdown report</text>
+
+  <rect class="box round" x="40" y="145" width="280" height="205" fill="#dbeafe" stroke="#2563eb" filter="url(#shadow)"/>
+  <text class="h2 center" x="180" y="188" fill="#1e3a8a">Operator workstation</text>
+  <text class="body center" x="180" y="230" font-weight="700">① Start AI application</text>
+  <text class="body center" x="180" y="261">Request merge analysis</text>
+  <text class="body center" x="180" y="292">⑨ Read published report</text>
+
+  <rect class="round" x="370" y="115" width="1190" height="815" fill="#f8fafc" stroke="#475569" stroke-width="3"/>
+  <text class="h3 center" x="965" y="153" fill="#334155">AWS us-east-2 • one RHEL host • OpenShell + application + local model</text>
+  <rect class="box round" x="400" y="175" width="1130" height="720" fill="#faf5ff" stroke="#9333ea"/>
+  <text class="body center" x="965" y="207" fill="#581c87" font-weight="700">g6e.12xlarge • RHEL 10.1 • Podman • 4× NVIDIA L40S (46,068 MiB each)</text>
+
+  <rect class="box round" x="450" y="245" width="410" height="220" fill="#fef3c7" stroke="#b45309" filter="url(#shadow)"/>
+  <text class="h2 center" x="655" y="286" fill="#78350f">vLLM local model service</text>
+  <text class="body center" x="655" y="327" font-weight="700">Qwen/Qwen3.6-27B • BF16</text>
+  <text class="body center" x="655" y="354">Tensor parallel = 4</text>
+  <text class="body center" x="655" y="381">Context = 32,768 tokens</text>
+  <text class="body center" x="655" y="408">OpenAI-compatible tool calling</text>
+  <text class="body center" x="655" y="435">/v1/chat/completions</text>
+
+  <rect class="round" x="900" y="245" width="580" height="220" fill="#ede9fe" stroke="#7c3aed" stroke-width="4" filter="url(#shadow)"/>
+  <text class="h2 center" x="1190" y="284" fill="#4c1d95">OpenShell integration + enforcement</text>
+  <text class="small center muted" x="1190" y="311">sandbox • process identity • credential boundary • managed inference</text>
+  <rect class="box round" x="930" y="337" width="155" height="95" fill="#dcfce7" stroke="#15803d"/>
+  <text class="small center" x="1007" y="363" fill="#166534" font-weight="700">ALLOW</text>
+  <text class="small center" x="1007" y="385" fill="#166534">GitHub GET</text>
+  <text class="small center" x="1007" y="407" fill="#166534">by curl</text>
+  <rect class="box round" x="1105" y="337" width="155" height="95" fill="#fee2e2" stroke="#dc2626"/>
+  <text class="small center" x="1182" y="363" fill="#991b1b" font-weight="700">DENY</text>
+  <text class="small center" x="1182" y="385" fill="#991b1b">other egress</text>
+  <text class="small center" x="1182" y="407" fill="#991b1b">and methods</text>
+  <rect class="box round" x="1280" y="337" width="165" height="95" fill="#f3e8ff" stroke="#7c3aed"/>
+  <text class="small center" x="1362" y="363" fill="#4c1d95" font-weight="700">ROUTE</text>
+  <text class="small center" x="1362" y="385" fill="#4c1d95">inference.local</text>
+  <text class="small center" x="1362" y="407" fill="#4c1d95">to vLLM</text>
+
+  <rect class="box round" x="555" y="535" width="815" height="155" fill="#ccfbf1" stroke="#0f766e" filter="url(#shadow)"/>
+  <text class="h2 center" x="962" y="574" fill="#134e4a">AI application: merge-report agent inside OpenShell sandbox</text>
+  <text class="small center" x="962" y="610">②–③ Ask Qwen for tool calls through managed inference</text>
+  <text class="small center" x="962" y="636">④–⑥ Collect PR, issue, label, and milestone evidence</text>
+  <text class="small center" x="962" y="662">⑦–⑧ Return bounded evidence • Qwen calls write_report(markdown)</text>
+
+  <rect class="box round" x="1090" y="765" width="390" height="110" fill="#e2e8f0" stroke="#334155" filter="url(#shadow)"/>
+  <text class="body center" x="1285" y="804" font-weight="700">GitHub API: NVIDIA/OpenShell</text>
+  <text class="body center" x="1285" y="833">PRs • issues • labels • milestones</text>
+
+  <rect class="box round" x="480" y="755" width="520" height="125" fill="#fef3c7" stroke="#b45309" filter="url(#shadow)"/>
+  <text class="body center" x="740" y="790" font-weight="700">⑨ Useful published Markdown report</text>
+  <text class="body center" x="740" y="818">Apache → OpenShell forward → sandbox</text>
+  <text class="body center" x="740" y="844">/var/www/html/nvidia-openshell-last-5-merges.md</text>
+
+  <rect class="box round" x="45" y="405" width="275" height="135" fill="#fff7ed" stroke="#b45309" stroke-dasharray="8 7"/>
+  <text class="body center" x="182" y="439" fill="#9a3412" font-weight="700">Credential boundary</text>
+  <text class="body center" x="182" y="468" fill="#9a3412">Keys stay outside sandbox</text>
+  <text class="body center" x="182" y="497" fill="#9a3412">and model requests</text>
+
+  <path d="M320 240H385V580H555" fill="none" stroke="#2563eb" stroke-width="3" marker-end="url(#blue-arrow)"/>
+  <text class="step" x="335" y="226" fill="#2563eb">① request</text>
+
+  <path d="M1185 535V465" fill="none" stroke="#7c3aed" stroke-width="3" marker-start="url(#purple-arrow)" marker-end="url(#purple-arrow)"/>
+  <text class="step" x="1203" y="505" fill="#6d28d9">② / ⑦ managed request</text>
+
+  <path d="M900 285H860" fill="none" stroke="#7c3aed" stroke-width="3" marker-start="url(#purple-arrow)" marker-end="url(#purple-arrow)"/>
+  <text class="small center" x="880" y="268" fill="#6d28d9">③ / ⑧</text>
+  <text class="tiny center" x="880" y="315" fill="#6d28d9">Chat Completions</text>
+
+  <path d="M1260 690L1285 765" fill="none" stroke="#15803d" stroke-width="3" marker-start="url(#green-arrow)" marker-end="url(#green-arrow)"/>
+  <text class="step" x="1300" y="724" fill="#15803d">④–⑥ tools + evidence</text>
+
+  <path d="M800 690L760 755" fill="none" stroke="#b45309" stroke-width="3" marker-end="url(#amber-arrow)"/>
+  <text class="step" x="645" y="720" fill="#b45309">⑨ validate + publish</text>
+
+  <path d="M320 472H385V385H450" fill="none" stroke="#b45309" stroke-width="2" stroke-dasharray="8 7" marker-end="url(#amber-arrow)"/>
+  <text class="tiny" x="332" y="455" fill="#9a3412">credentials never follow requests</text>
+
+  <text class="small center muted" x="965" y="920">OpenShell mediates model routing and external tools while the application owns orchestration and report publication.</text>
+</svg>

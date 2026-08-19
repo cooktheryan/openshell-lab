@@ -1,0 +1,95 @@
+[1787092249.836] [sandbox] [INFO ] [openshell_sandbox] Starting sandbox command=["sleep", "infinity"]
+[1787092249.836] [sandbox] [INFO ] [openshell_sandbox] Fetching sandbox policy via gRPC endpoint=https://host.containers.internal:17670 sandbox_id=ce2b118a-13cc-4021-9653-492232238e9c
+[1787092249.890] [sandbox] [INFO ] [openshell_sandbox] Creating OPA engine from proto policy data
+[1787092249.890] [sandbox] [INFO ] [openshell_supervisor_network::opa] Configured OPA runtime binary identity mode require_binary_identity=true source=proto
+[1787092249.890] [sandbox] [OCSF ] [ocsf] CONFIG:CONFIGURED [INFO] OPA runtime binary identity mode configured [source:proto require_binary_identity:true] [source:proto]
+[1787092249.910] [sandbox] [OCSF ] [ocsf] CONFIG:LOADED [INFO] Fetched provider environment [env_count:0]
+[1787092249.910] [sandbox] [OCSF ] [ocsf] CONFIG:CREATING [INFO] Creating network namespace [ns:sandbox-dda34f0a host_veth:veth-h-dda34f0a sandbox_veth:veth-s-dda34f0a]
+[1787092249.948] [sandbox] [OCSF ] [ocsf] CONFIG:CREATED [INFO] Network namespace created [ns:sandbox-dda34f0a host_ip:10.200.0.1 sandbox_ip:10.200.0.2]
+[1787092250.000] [sandbox] [OCSF ] [ocsf] CONFIG:INSTALLED [INFO] Bypass detection rules installed [ns:sandbox-dda34f0a]
+[1787092250.004] [sandbox] [OCSF ] [ocsf] CONFIG:ENABLED [INFO] TLS termination enabled: ephemeral CA generated
+[1787092250.004] [sandbox] [INFO ] [openshell_supervisor_network::inference_routes] Fetching inference route bundle from gateway endpoint=https://host.containers.internal:17670
+[1787092250.009] [sandbox] [OCSF ] [ocsf] CONFIG:LOADED [INFO] Loaded inference route bundle [route_count:1 revision:a714bcde22c0d7db]
+[1787092250.009] [sandbox] [OCSF ] [ocsf] CONFIG:ENABLED [INFO] Inference routing enabled with local execution [route_count:1]
+[1787092250.018] [sandbox] [OCSF ] [ocsf] NET:LISTEN [INFO] 10.200.0.1:3128
+[1787092250.018] [sandbox] [INFO ] [openshell_supervisor_network::proxy] Trusted host gateway detected from /etc/hosts; host-gateway aliases exempt from SSRF always-blocked check ip=169.254.1.2
+[1787092250.018] [sandbox] [INFO ] [openshell_supervisor_process::process] Preparing managed workspace gid=Some(Gid(1500)) path=/sandbox uid=Some(Uid(1500))
+[1787092250.031] [sandbox] [OCSF ] [ocsf] SSH:LISTEN [INFO]
+[1787092250.031] [sandbox] [OCSF ] [ocsf] LIFECYCLE:INSTALL [INFO] OpenShell Sandbox Supervisor success
+[1787092250.031] [sandbox] [INFO ] [openshell_supervisor_process::run] supervisor session task spawned
+[1787092250.031] [sandbox] [OCSF ] [ocsf] CONFIG:PROBED [INFO] Landlock filesystem sandbox available [abi:v6 compat:HardRequirement ro:6 rw:3]
+[1787092250.031] [sandbox] [OCSF ] [ocsf] CONFIG:APPLYING [INFO] Applying Landlock filesystem sandbox [abi:V2 compat:HardRequirement ro:6 rw:3]
+[1787092250.031] [sandbox] [OCSF ] [ocsf] CONFIG:BUILT [INFO] Landlock ruleset built [rules_applied:9 skipped:0]
+[1787092250.036] [sandbox] [OCSF ] [ocsf] PROC:LAUNCH [INFO] sleep(34)
+[1787092250.044] [sandbox] [OCSF ] [ocsf] CONFIG:LOADED [INFO] Acknowledged initial policy revision as loaded [version:1] [hash:653445e677b57999d0a7472ad798d566e2459b5f5d61e77b718a104dca12640e]
+[1787092250.053] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] host.containers.internal:17670
+[1787092250.079] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] [msg:ssh relay open (channel_id=1b2e5398-1ef3-4dc7-86ce-110ef00ce220, target=unix:/run/openshell/ssh.sock)]
+[1787092250.080] [sandbox] [OCSF ] [ocsf] SSH:OPEN [INFO] ALLOWED
+[1787092250.118] [sandbox] [OCSF ] [ocsf] SSH:FAIL [LOW]
+[1787092250.144] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] [msg:ssh relay open (channel_id=de5f0627-b22e-4aa7-9bea-ea55b1638181, target=unix:/run/openshell/ssh.sock)]
+[1787092250.144] [sandbox] [OCSF ] [ocsf] SSH:OPEN [INFO] ALLOWED
+[1787092250.157] [sandbox] [OCSF ] [ocsf] CONFIG:APPLYING [INFO] Applying Landlock filesystem sandbox [abi:V2 compat:HardRequirement ro:6 rw:3]
+[1787092250.157] [sandbox] [OCSF ] [ocsf] CONFIG:BUILT [INFO] Landlock ruleset built [rules_applied:9 skipped:0]
+[1787092250.194] [sandbox] [OCSF ] [ocsf] NET:CLOSE [INFO] [msg:ssh relay closed (channel_id=de5f0627-b22e-4aa7-9bea-ea55b1638181, target=unix:/run/openshell/ssh.sock)]
+[1787092250.213] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] [msg:ssh relay open (channel_id=f2b185ba-e945-4698-b69f-e7d308d9a80a, target=unix:/run/openshell/ssh.sock)]
+[1787092250.214] [sandbox] [OCSF ] [ocsf] SSH:OPEN [INFO] ALLOWED
+[1787092250.219] [sandbox] [OCSF ] [ocsf] CONFIG:APPLYING [INFO] Applying Landlock filesystem sandbox [abi:V2 compat:HardRequirement ro:6 rw:3]
+[1787092250.219] [sandbox] [OCSF ] [ocsf] CONFIG:BUILT [INFO] Landlock ruleset built [rules_applied:9 skipped:0]
+[1787092250.752] [sandbox] [INFO ] [openshell_supervisor_network::run] Container filesystem accessible, resolving policy binary symlinks attempt=1 pid=34
+[1787092250.753] [sandbox] [INFO ] [openshell_supervisor_network::opa] Configured OPA runtime binary identity mode require_binary_identity=true source=proto
+[1787092250.753] [sandbox] [OCSF ] [ocsf] CONFIG:CONFIGURED [INFO] OPA runtime binary identity mode configured [source:proto require_binary_identity:true] [source:proto]
+[1787092250.756] [sandbox] [INFO ] [openshell_supervisor_network::run] Policy binary symlink resolution complete (check logs above for per-binary results) pid=34
+[1787092250.769] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED inference.local:443
+[1787092250.769] [sandbox] [INFO ] [openshell_router] routing proxy inference request (streaming) endpoint=https://api.openai.com/v1 method=POST path=/v1/chat/completions protocols=openai_chat_completions,openai_completions,openai_responses,openai_embeddings,model_discovery
+[1787092252.600] [sandbox] [OCSF ] [ocsf] NET:OPEN [MED] DENIED /usr/bin/curl(77) -> api.github.com:443 [policy:- engine:opa] [reason:network connections not allowed by policy]
+[1787092252.614] [sandbox] [OCSF ] [ocsf] NET:CLOSE [INFO] [msg:ssh relay closed (channel_id=f2b185ba-e945-4698-b69f-e7d308d9a80a, target=unix:/run/openshell/ssh.sock)]
+[1787092260.031] [sandbox] [INFO ] [openshell_sandbox] Flushed denial analysis to gateway proposals=1 sandbox_name=openshell-lab3 summaries=1
+[1787092260.031] [sandbox] [INFO ] [openshell_sandbox] Flushed activity summary to gateway denied_action_count=1 network_activity_count=1 sandbox_name=openshell-lab3
+[1787092260.039] [sandbox] [OCSF ] [ocsf] CONFIG:DETECTED [INFO] Settings poll: config change detected [old_revision:6857801050862594528 new_revision:9844123347061460325 policy_changed:true provider_env_changed:false]
+[1787092260.040] [sandbox] [INFO ] [openshell_supervisor_network::opa] Configured OPA runtime binary identity mode require_binary_identity=true source=proto
+[1787092260.040] [sandbox] [OCSF ] [ocsf] CONFIG:CONFIGURED [INFO] OPA runtime binary identity mode configured [source:proto require_binary_identity:true] [source:proto]
+[1787092260.052] [sandbox] [OCSF ] [ocsf] CONFIG:LOADED [INFO] Policy reloaded successfully [policy_hash:da568157371d39eeb00635b418967cf22250d2680ab5397e4738c01d023ad18e] [hash:da568157371d39eeb00635b418967cf22250d2680ab5397e4738c01d023ad18e]
+[1787092260.687] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] [msg:ssh relay open (channel_id=67d5e897-beef-49dd-ae4e-9ab4658d4c30, target=unix:/run/openshell/ssh.sock)]
+[1787092260.687] [sandbox] [OCSF ] [ocsf] SSH:OPEN [INFO] ALLOWED
+[1787092260.692] [sandbox] [OCSF ] [ocsf] CONFIG:APPLYING [INFO] Applying Landlock filesystem sandbox [abi:V2 compat:HardRequirement ro:6 rw:3]
+[1787092260.692] [sandbox] [OCSF ] [ocsf] CONFIG:BUILT [INFO] Landlock ruleset built [rules_applied:9 skipped:0]
+[1787092260.807] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED inference.local:443
+[1787092260.808] [sandbox] [INFO ] [openshell_router] routing proxy inference request (streaming) endpoint=https://api.openai.com/v1 method=POST path=/v1/chat/completions protocols=openai_chat_completions,openai_completions,openai_responses,openai_embeddings,model_discovery
+[1787092261.872] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED /usr/bin/curl(100) -> api.github.com:443 [policy:github_api_readonly engine:opa]
+[1787092261.898] [sandbox] [OCSF ] [ocsf] HTTP:GET [INFO] ALLOWED GET http://api.github.com:443/repos/NVIDIA/OpenShell/pulls [policy:github_api_readonly engine:l7]
+[1787092262.902] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED inference.local:443
+[1787092262.902] [sandbox] [INFO ] [openshell_router] routing proxy inference request (streaming) endpoint=https://api.openai.com/v1 method=POST path=/v1/chat/completions protocols=openai_chat_completions,openai_completions,openai_responses,openai_embeddings,model_discovery
+[1787092265.148] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED /usr/bin/curl(102) -> api.github.com:443 [policy:github_api_readonly engine:opa]
+[1787092265.163] [sandbox] [OCSF ] [ocsf] HTTP:GET [INFO] ALLOWED GET http://api.github.com:443/repos/NVIDIA/OpenShell/pulls/2780 [policy:github_api_readonly engine:l7]
+[1787092265.406] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED /usr/bin/curl(103) -> api.github.com:443 [policy:github_api_readonly engine:opa]
+[1787092265.421] [sandbox] [OCSF ] [ocsf] HTTP:GET [INFO] ALLOWED GET http://api.github.com:443/repos/NVIDIA/OpenShell/pulls/2664 [policy:github_api_readonly engine:l7]
+[1787092265.593] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED /usr/bin/curl(104) -> api.github.com:443 [policy:github_api_readonly engine:opa]
+[1787092265.609] [sandbox] [OCSF ] [ocsf] HTTP:GET [INFO] ALLOWED GET http://api.github.com:443/repos/NVIDIA/OpenShell/pulls/2774 [policy:github_api_readonly engine:l7]
+[1787092265.788] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED /usr/bin/curl(105) -> api.github.com:443 [policy:github_api_readonly engine:opa]
+[1787092265.804] [sandbox] [OCSF ] [ocsf] HTTP:GET [INFO] ALLOWED GET http://api.github.com:443/repos/NVIDIA/OpenShell/pulls/2789 [policy:github_api_readonly engine:l7]
+[1787092265.967] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED /usr/bin/curl(106) -> api.github.com:443 [policy:github_api_readonly engine:opa]
+[1787092265.984] [sandbox] [OCSF ] [ocsf] HTTP:GET [INFO] ALLOWED GET http://api.github.com:443/repos/NVIDIA/OpenShell/pulls/2699 [policy:github_api_readonly engine:l7]
+[1787092266.157] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED inference.local:443
+[1787092266.157] [sandbox] [INFO ] [openshell_router] routing proxy inference request (streaming) endpoint=https://api.openai.com/v1 method=POST path=/v1/chat/completions protocols=openai_chat_completions,openai_completions,openai_responses,openai_embeddings,model_discovery
+[1787092269.289] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED /usr/bin/curl(108) -> api.github.com:443 [policy:github_api_readonly engine:opa]
+[1787092269.305] [sandbox] [OCSF ] [ocsf] HTTP:GET [INFO] ALLOWED GET http://api.github.com:443/repos/NVIDIA/OpenShell/issues/2777 [policy:github_api_readonly engine:l7]
+[1787092269.569] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED /usr/bin/curl(109) -> api.github.com:443 [policy:github_api_readonly engine:opa]
+[1787092269.584] [sandbox] [OCSF ] [ocsf] HTTP:GET [INFO] ALLOWED GET http://api.github.com:443/repos/NVIDIA/OpenShell/issues/2663 [policy:github_api_readonly engine:l7]
+[1787092269.759] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED /usr/bin/curl(110) -> api.github.com:443 [policy:github_api_readonly engine:opa]
+[1787092269.775] [sandbox] [OCSF ] [ocsf] HTTP:GET [INFO] ALLOWED GET http://api.github.com:443/repos/NVIDIA/OpenShell/issues/2662 [policy:github_api_readonly engine:l7]
+[1787092269.983] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED inference.local:443
+[1787092269.983] [sandbox] [INFO ] [openshell_router] routing proxy inference request (streaming) endpoint=https://api.openai.com/v1 method=POST path=/v1/chat/completions protocols=openai_chat_completions,openai_completions,openai_responses,openai_embeddings,model_discovery
+[1787092291.279] [sandbox] [OCSF ] [ocsf] NET:CLOSE [INFO] [msg:ssh relay closed (channel_id=67d5e897-beef-49dd-ae4e-9ab4658d4c30, target=unix:/run/openshell/ssh.sock)]
+[1787092291.288] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] [msg:ssh relay open (channel_id=d57f9801-60d7-4996-b64b-e76497e43f05, target=unix:/run/openshell/ssh.sock)]
+[1787092291.288] [sandbox] [OCSF ] [ocsf] SSH:OPEN [INFO] ALLOWED
+[1787092291.293] [sandbox] [OCSF ] [ocsf] CONFIG:APPLYING [INFO] Applying Landlock filesystem sandbox [abi:V2 compat:HardRequirement ro:6 rw:3]
+[1787092291.293] [sandbox] [OCSF ] [ocsf] CONFIG:BUILT [INFO] Landlock ruleset built [rules_applied:9 skipped:0]
+[1787092291.350] [sandbox] [OCSF ] [ocsf] NET:CLOSE [INFO] [msg:ssh relay closed (channel_id=d57f9801-60d7-4996-b64b-e76497e43f05, target=unix:/run/openshell/ssh.sock)]
+[1787092291.359] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] [msg:ssh relay open (channel_id=34b5bbc8-0a4d-46a9-b167-cc1cd82a47fb, target=unix:/run/openshell/ssh.sock)]
+[1787092291.359] [sandbox] [OCSF ] [ocsf] SSH:OPEN [INFO] ALLOWED
+[1787092291.364] [sandbox] [OCSF ] [ocsf] CONFIG:APPLYING [INFO] Applying Landlock filesystem sandbox [abi:V2 compat:HardRequirement ro:6 rw:3]
+[1787092291.364] [sandbox] [OCSF ] [ocsf] CONFIG:BUILT [INFO] Landlock ruleset built [rules_applied:9 skipped:0]
+[1787092291.394] [sandbox] [OCSF ] [ocsf] NET:CLOSE [INFO] [msg:ssh relay closed (channel_id=34b5bbc8-0a4d-46a9-b167-cc1cd82a47fb, target=unix:/run/openshell/ssh.sock)]
+[1787092291.412] [sandbox] [OCSF ] [ocsf] SSH:FAIL [LOW]
+[1787092292.424] [sandbox] [WARN ] [openshell_supervisor_process::ssh] data on unknown channel ChannelId(4)
+[1787092292.427] [sandbox] [WARN ] [openshell_supervisor_process::ssh] channel_eof on unknown channel ChannelId(4)
