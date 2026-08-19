@@ -4,6 +4,14 @@ set -euo pipefail
 
 destination="$HOME/run-openshell-agent.sh"
 temporary=$(mktemp "$HOME/run-openshell-agent.sh.XXXXXX")
+for lab_name in lab1 lab2 lab3 lab4; do
+    runner="$HOME/git/openshell-lab/labs/$lab_name/run.sh"
+    [[ -x "$runner" ]] || {
+        printf 'required lab runner is unavailable: %s\n' "$runner" >&2
+        rm -f -- "$temporary"
+        exit 1
+    }
+done
 printf '%s\n' \
     '#!/usr/bin/env bash' \
     'set -euo pipefail' \
@@ -17,7 +25,9 @@ printf '%s\n' \
     'fi' \
     'case "$lab" in lab1|lab2|lab3|lab4) ;; *) echo "usage: $0 [lab1|lab2|lab3|lab4]" >&2; exit 2;; esac' \
     'cd "$HOME/git/openshell-lab"' \
-    '"./labs/$lab/run.sh"' >"$temporary"
-chmod 0755 "$temporary"
+    'runner="./labs/$lab/run.sh"' \
+    '[[ -x "$runner" ]] || { echo "lab runner is unavailable: $runner" >&2; exit 1; }' \
+    'exec "$runner"' >"$temporary"
+chmod 0700 "$temporary"
 mv "$temporary" "$destination"
 printf '%s\n' "$destination"

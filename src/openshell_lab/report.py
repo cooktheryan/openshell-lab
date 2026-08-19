@@ -6,6 +6,7 @@ import tempfile
 
 
 REPORT_TITLE = "# NVIDIA/OpenShell: Last 5 Merged Pull Requests"
+DIRECTORY_FSYNC_SUPPORTED = os.name != "nt"
 
 _CREDENTIAL_PATTERNS = (
     re.compile(r"sk-[A-Za-z0-9_-]{20,}"),
@@ -62,7 +63,12 @@ def render_evidence_index(evidence: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def validate_markdown(markdown: str, evidence: dict) -> str:
+def validate_markdown(
+    markdown: str,
+    evidence: dict,
+    *,
+    allow_evidence_index: bool = False,
+) -> str:
     if not isinstance(markdown, str):
         raise ValueError("report must be Markdown text")
     text = markdown.strip()
@@ -73,17 +79,46 @@ def validate_markdown(markdown: str, evidence: dict) -> str:
     if "\n## Executive Summary\n" not in text:
         raise ValueError("report has no executive summary")
 
+    if text.count("```") % 2:
+        raise ValueError("report contains an unterminated fenced code block")
+    if "```" in text:
+        raise ValueError("report contains fenced code blocks")
+    structural_text = text
+
+    allowed_headings = {
+        REPORT_TITLE,
+        "## Executive Summary",
+        "### What changed",
+        "### Larger task context",
+    }
+    if allow_evidence_index:
+        allowed_headings.add("## Evidence Index")
+    for heading in re.findall(r"^#{1,6}\s+.+$", structural_text, re.MULTILINE):
+        if heading in allowed_headings or re.fullmatch(r"## PR #[0-9]+:.+", heading):
+            continue
+        raise ValueError(f"report contains unexpected heading: {heading}")
+    if structural_text.count("## Executive Summary\n") != 1:
+        raise ValueError("report must contain exactly one executive summary")
+
     expected_numbers = [item["number"] for item in evidence["pull_requests"]]
     if not expected_numbers:
         raise ValueError("report evidence contains no pull requests")
     headings = [
         int(number)
-        for number in re.findall(r"^## PR #([0-9]+):", text, re.MULTILINE)
+        for number in re.findall(r"^## PR #([0-9]+):", structural_text, re.MULTILINE)
     ]
     if headings != expected_numbers:
         raise ValueError(
             f"report headings {headings} do not match selected pull requests {expected_numbers}"
         )
+    if len(re.findall(r"^### What changed\s*$", structural_text, re.MULTILINE)) != 5:
+        raise ValueError("report must contain exactly five change summaries")
+    if len(
+        re.findall(r"^### Larger task context\s*$", structural_text, re.MULTILINE)
+    ) != 5:
+        raise ValueError("report must contain exactly five task-context sections")
+    if allow_evidence_index and structural_text.count("## Evidence Index") != 1:
+        raise ValueError("published report must contain exactly one evidence index")
 
     required_patterns = (
         r"^- URL:\s+\S+",
@@ -94,19 +129,22 @@ def validate_markdown(markdown: str, evidence: dict) -> str:
         r"^### What changed\s*$",
         r"^### Larger task context\s*$",
     )
-    if text.count("```") % 2:
-        raise ValueError("report contains an unterminated fenced code block")
     sections = re.split(r"(?=^## PR #[0-9]+:)", text, flags=re.MULTILINE)[1:]
     for number, section in zip(expected_numbers, sections, strict=True):
-        structural_text = re.sub(r"```.*?```", "", section, flags=re.DOTALL)
-        missing = [
-            pattern
+        counts = {
+            pattern: len(re.findall(pattern, section, re.MULTILINE))
             for pattern in required_patterns
-            if not re.search(pattern, structural_text, re.MULTILINE)
-        ]
+        }
+        missing = [pattern for pattern, count in counts.items() if count == 0]
         if missing:
             raise ValueError(
                 f"PR #{number} section is missing required structure: {', '.join(missing)}"
+            )
+        duplicates = [pattern for pattern, count in counts.items() if count > 1]
+        if duplicates:
+            raise ValueError(
+                f"PR #{number} section contains duplicate structure: "
+                f"{', '.join(duplicates)}"
             )
 
     normalized_sections = []
@@ -152,18 +190,19 @@ def write_report(path: Path | str, markdown: str) -> None:
             os.fsync(handle.fileno())
         os.chmod(temporary_name, 0o600)
         os.replace(temporary_name, destination)
-        try:
-            directory_fd = os.open(destination.parent, os.O_RDONLY)
+        if DIRECTORY_FSYNC_SUPPORTED:
             try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
-        except OSError as error:
-            unsupported = {errno.EINVAL, errno.ENOTSUP}
-            if hasattr(errno, "EOPNOTSUPP"):
-                unsupported.add(errno.EOPNOTSUPP)
-            if error.errno not in unsupported:
-                raise
+                directory_fd = os.open(destination.parent, os.O_RDONLY)
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+            except OSError as error:
+                unsupported = {errno.EINVAL, errno.ENOTSUP}
+                if hasattr(errno, "EOPNOTSUPP"):
+                    unsupported.add(errno.EOPNOTSUPP)
+                if error.errno not in unsupported:
+                    raise
     except BaseException:
         if temporary_name is not None:
             try:

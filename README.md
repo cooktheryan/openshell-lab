@@ -123,8 +123,13 @@ value. The sandbox continues to call only `inference.local`.
 
 ## Inspect OpenShell state and persistence
 
-OpenShell is installed from checksum-verified RPM release artifacts. Its user
-service unit is `/usr/lib/systemd/user/openshell-gateway.service`. Operator
+The bootstrap resolves NVIDIA/OpenShell's current stable GitHub release, fetches
+that tag's installer, installs its checksum-verified RPM artifact, and refuses
+to continue unless `openshell --version` matches the resolved tag. The latest
+stable release verified during the 2026-08-18 review was
+[`v0.0.106`](https://github.com/NVIDIA/OpenShell/releases/tag/v0.0.106); the
+bootstrap resolves this dynamically rather than pinning that audit-time value.
+Its user service unit is `/usr/lib/systemd/user/openshell-gateway.service`. Operator
 configuration and gateway registration metadata persist under
 `~/.config/openshell/`; local TLS and runtime state persist under
 `~/.local/state/openshell/`. Provider secrets belong to OpenShell's provider
@@ -166,7 +171,13 @@ Stop the GPU host safely:
 ./infra/aws/stop-gpu.sh
 ```
 
-The CPU host can be stopped with the AWS CLI after reading its guarded state;
-the repository intentionally provides no termination command. After a restart,
-refresh its state file or public address and rerun the relevant deployment
-script. The user services use lingering and resume automatically.
+Stop and restart the CPU host with the guarded lifecycle scripts:
+
+```shell
+./infra/aws/stop-cpu.sh
+./infra/aws/start-cpu.sh
+```
+
+The repository intentionally provides no termination command. The start script
+refreshes the private state file and public address. User services use lingering
+and resume automatically.

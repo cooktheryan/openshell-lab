@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 
 from openshell_lab import github_evidence
 from openshell_lab.report import (
@@ -19,7 +20,7 @@ MAX_TOOL_CALLS = 16
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 MAX_TOOL_RESULT_BYTES = 2 * 1024 * 1024
 
-SYSTEM_PROMPT = """You are a release-analysis agent operating behind OpenShell.
+SYSTEM_PROMPT = f"""You are a release-analysis agent operating behind OpenShell.
 Create an evidence-grounded Markdown report for exactly the five most recently
 merged NVIDIA/OpenShell pull requests. Begin by calling list_recent_merges.
 Inspect selected pull requests as needed. Inspect only issues explicitly linked
@@ -30,9 +31,9 @@ body relationship provides evidence.
 
 
 The Markdown passed to write_report MUST follow this exact contract:
-# NVIDIA/OpenShell: Last 5 Merged Pull Requests
+{REPORT_TITLE}
 ## Executive Summary
-## PR #{number}: {title}
+## PR #{{number}}: {{title}}
 - URL:
 - Merged:
 - Author:
@@ -190,6 +191,7 @@ def _positive_number(arguments: dict) -> int:
 
 
 def _curl_json(curl_bin: str, url: str, request_body: dict | None = None) -> object:
+    request_stream = None
     command = [
         curl_bin,
         "--silent",
@@ -215,6 +217,13 @@ def _curl_json(curl_bin: str, url: str, request_body: dict | None = None) -> obj
         request_payload = json.dumps(request_body, separators=(",", ":")).encode(
             "utf-8"
         )
+        request_stream = tempfile.TemporaryFile()
+        try:
+            request_stream.write(request_payload)
+            request_stream.seek(0)
+        except BaseException:
+            request_stream.close()
+            raise
         command.extend(
             [
                 "--request",
@@ -226,24 +235,19 @@ def _curl_json(curl_bin: str, url: str, request_body: dict | None = None) -> obj
             ]
         )
     command.append(url)
-    process = subprocess.Popen(
-        command,
-        stdin=subprocess.PIPE if request_body is not None else subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=request_stream if request_stream is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+    except BaseException:
+        if request_stream is not None:
+            request_stream.close()
+        raise
     chunks = []
     try:
-        if request_body is not None:
-            try:
-                process.stdin.write(request_payload)
-            except BrokenPipeError:
-                pass
-            finally:
-                try:
-                    process.stdin.close()
-                except BrokenPipeError:
-                    pass
         total = 0
         while True:
             chunk = process.stdout.read(64 * 1024)
@@ -259,13 +263,15 @@ def _curl_json(curl_bin: str, url: str, request_body: dict | None = None) -> obj
             process.kill()
         process.wait()
         process.stdout.close()
+        if request_stream is not None:
+            request_stream.close()
     response_body = b"".join(chunks)
     if returncode != 0:
         detail = response_body.decode("utf-8", "replace")[:500]
         raise RuntimeError(f"curl failed with status {returncode}: {detail}")
     try:
         return json.loads(response_body)
-    except json.JSONDecodeError as error:
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
         raise ValueError(f"invalid JSON response from {url}") from error
 
 
@@ -329,7 +335,7 @@ def dispatch_tool(name: str, arguments: dict, state: ToolState) -> dict:
         evidence = github_evidence.build_evidence(state.selected_pulls, state.issues)
         markdown = validate_markdown(arguments["markdown"], evidence)
         markdown = markdown.rstrip() + "\n\n" + render_evidence_index(evidence)
-        markdown = validate_markdown(markdown, evidence)
+        markdown = validate_markdown(markdown, evidence, allow_evidence_index=True)
         write_report(state.report_path, markdown)
         state.report_published = True
         return {"published": True, "path": str(state.report_path)}

@@ -4,7 +4,9 @@ import os
 
 
 _steps_dir = os.path.dirname(__file__)
-_package_name = "features.steps"
+# Behave executes this package initializer with ``__name__ == "builtins"``;
+# normal Python imports retain the package-qualified module name.
+_package_name = "features.steps" if __name__ == "builtins" else __name__
 for _subdir in ("given", "when", "then"):
     _subdir_path = os.path.join(_steps_dir, _subdir)
     if not os.path.isdir(_subdir_path):

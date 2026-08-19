@@ -63,6 +63,18 @@ class Lab3ArtifactTests(unittest.TestCase):
         self.assertEqual("/var/www/html/openshell-lab", mounts[0]["source"])
         self.assertEqual("/var/www/html", mounts[0]["target"])
 
+    def test_run_stops_its_own_forward_and_clears_denied_partial_output(self):
+        text = (LAB / "run.sh").read_text(encoding="utf-8")
+        self.assertIn("openshell forward stop 18080 openshell-lab3", text)
+        self.assertNotIn("openshell forward stop 18080 openshell-lab2", text)
+        self.assertGreaterEqual(
+            text.count(
+                "podman unshare rm -f /var/www/html/openshell-lab/"
+                "nvidia-openshell-last-5-merges.md"
+            ),
+            2,
+        )
+
     def test_build_and_verify_inspect_nonroot_identity(self):
         for name in ("build.sh", "run.sh", "verify.sh"):
             self.assertTrue((LAB / name).is_file())
@@ -78,6 +90,7 @@ class Lab3ArtifactTests(unittest.TestCase):
         text = (LAB / "verify.sh").read_text(encoding="utf-8")
         self.assertIn("published_report=$(mktemp)", text)
         self.assertNotIn('grep -F \'# NVIDIA/OpenShell\' "$REPORT"', text)
+        self.assertIn("grep -c '^## PR #[0-9]", text)
 
 
 if __name__ == "__main__":

@@ -38,6 +38,22 @@ class AwsScriptTests(unittest.TestCase):
         self.assertIn("cpu-connection.env", text)
         self.assertIn("mv", text)
 
+    def test_launcher_serializes_and_persists_identity_before_health_waits(self):
+        launch = self.read("launch-cpu.sh")
+        self.assertIn('launch_lock="${STATE_FILE}.launch.lock"', launch)
+        self.assertIn('mkdir -- "$launch_lock"', launch)
+        self.assertLess(
+            launch.index('write_cpu_state "$instance_id"'),
+            launch.index("ec2 wait instance-running"),
+        )
+
+    def test_state_loader_validates_all_values_used_by_start(self):
+        common = self.read("lib.sh")
+        self.assertIn('SUBNET_ID=$(state_value SUBNET_ID)', common)
+        self.assertIn('SECURITY_GROUP_ID=$(state_value SECURITY_GROUP_ID)', common)
+        self.assertIn('^subnet-[0-9a-f]+$', common)
+        self.assertIn('^sg-[0-9a-f]+$', common)
+
     def test_lifecycle_scripts_resolve_and_validate_before_mutation(self):
         common = self.read("lib.sh")
         stop = self.read("stop-cpu.sh")
@@ -54,6 +70,15 @@ class AwsScriptTests(unittest.TestCase):
         self.assertNotIn("terminate-instances", stop + start + describe)
         self.assertIn("start-instances", start)
         self.assertIn("describe-instances", describe)
+
+    def test_stop_waits_out_pending_and_stopping_states(self):
+        stop = self.read("stop-cpu.sh")
+        pending = stop.index('[[ "$current_state" == "pending" ]]')
+        wait_running = stop.index("ec2 wait instance-running")
+        mutation = stop.index("ec2 stop-instances")
+        self.assertLess(pending, wait_running)
+        self.assertLess(wait_running, mutation)
+        self.assertIn("ec2 wait instance-stopped", stop)
 
     def test_scripts_do_not_embed_credentials_or_user_data(self):
         text = "\n".join(path.read_text(encoding="utf-8") for path in AWS.glob("*.sh"))

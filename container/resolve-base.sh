@@ -12,11 +12,23 @@ for command_name in curl jq skopeo sort; do
     }
 done
 
-tag=$(curl --silent --show-error --fail-with-body --max-time 30 "$api" |
-    jq -r '.tags[].name' |
+page=1
+all_tags=""
+while :; do
+    payload=$(curl --silent --show-error --fail-with-body --max-time 30 \
+        "${api}&page=$page")
+    all_tags+=$'\n'$(jq -r '.tags[].name' <<<"$payload")
+    [[ $(jq -r '.has_additional // false' <<<"$payload") == true ]] || break
+    ((page++))
+    [[ "$page" -le 100 ]] || {
+        printf 'Quay tag pagination exceeded 100 pages\n' >&2
+        exit 1
+    }
+done
+tag=$(printf '%s\n' "$all_tags" |
     grep -E '^0\.3\.[0-9]+$' |
     sort -V |
-    tail -n 1)
+    tail -n 1 || true)
 [[ "$tag" =~ ^0\.3\.[0-9]+$ ]] || {
     printf 'no stable 0.3.x tag was found\n' >&2
     exit 1
@@ -32,6 +44,7 @@ architecture=$(jq -er '.Architecture' <<<"$metadata")
 }
 
 temporary=$(mktemp "$SCRIPT_DIR/base-image.lock.XXXXXX")
+trap 'rm -f -- "$temporary"' EXIT
 {
     printf 'name=%s\n' "$repository"
     printf 'tag=%s\n' "$tag"
@@ -41,4 +54,5 @@ temporary=$(mktemp "$SCRIPT_DIR/base-image.lock.XXXXXX")
     printf 'resolved_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >"$temporary"
 mv "$temporary" "$SCRIPT_DIR/base-image.lock"
+trap - EXIT
 printf '%s@%s\n' "$repository" "$digest"

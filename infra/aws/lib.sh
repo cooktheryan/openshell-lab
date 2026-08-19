@@ -31,8 +31,18 @@ load_cpu_state() {
         exit 1
     }
     INSTANCE_ID=$(awk -F= '$1 == "INSTANCE_ID" {print substr($0, index($0, "=") + 1)}' "$STATE_FILE")
+    SUBNET_ID=$(state_value SUBNET_ID)
+    SECURITY_GROUP_ID=$(state_value SECURITY_GROUP_ID)
     [[ "$INSTANCE_ID" =~ ^i-[0-9a-f]+$ ]] || {
         printf 'CPU state contains an invalid instance ID\n' >&2
+        exit 1
+    }
+    [[ "$SUBNET_ID" =~ ^subnet-[0-9a-f]+$ ]] || {
+        printf 'CPU state contains an invalid subnet ID\n' >&2
+        exit 1
+    }
+    [[ "$SECURITY_GROUP_ID" =~ ^sg-[0-9a-f]+$ ]] || {
+        printf 'CPU state contains an invalid security group ID\n' >&2
         exit 1
     }
 }
@@ -57,29 +67,38 @@ instance_state() {
         --query 'Reservations[0].Instances[0].State.Name' --output text
 }
 
-write_cpu_state() {
+write_cpu_state() (
     local instance_id=$1 subnet_id=$2 security_group_id=$3
-    local public_ip private_ip temporary
-    public_ip=$(aws_cli ec2 describe-instances --instance-ids "$instance_id" \
-        --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
-    private_ip=$(aws_cli ec2 describe-instances --instance-ids "$instance_id" \
-        --query 'Reservations[0].Instances[0].PrivateIpAddress' --output text)
+    local phase=${4:-complete} public_ip="" private_ip="" temporary
+    if [[ "$phase" == complete ]]; then
+        public_ip=$(aws_cli ec2 describe-instances --instance-ids "$instance_id" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+        private_ip=$(aws_cli ec2 describe-instances --instance-ids "$instance_id" \
+            --query 'Reservations[0].Instances[0].PrivateIpAddress' --output text)
+        [[ "$public_ip" =~ ^[0-9.]+$ && "$private_ip" =~ ^[0-9.]+$ ]] || {
+            printf 'CPU instance has no usable network addresses\n' >&2
+            exit 1
+        }
+    elif [[ "$phase" != provisional ]]; then
+        printf 'unsupported CPU state phase: %s\n' "$phase" >&2
+        exit 1
+    fi
     mkdir -p "$(dirname -- "$STATE_FILE")"
     umask 077
     temporary=$(mktemp "${STATE_FILE}.XXXXXX")
     {
-        printf 'AWS_REGION=%s\n' "$AWS_REGION"
-        printf 'INSTANCE_ID=%s\n' "$instance_id"
-        printf 'PUBLIC_IP=%s\n' "$public_ip"
-        printf 'PRIVATE_IP=%s\n' "$private_ip"
-        printf 'SUBNET_ID=%s\n' "$subnet_id"
-        printf 'SECURITY_GROUP_ID=%s\n' "$security_group_id"
+        printf 'AWS_REGION=%q\n' "$AWS_REGION"
+        printf 'INSTANCE_ID=%q\n' "$instance_id"
+        printf 'PUBLIC_IP=%q\n' "$public_ip"
+        printf 'PRIVATE_IP=%q\n' "$private_ip"
+        printf 'SUBNET_ID=%q\n' "$subnet_id"
+        printf 'SECURITY_GROUP_ID=%q\n' "$security_group_id"
         printf 'SSH_USER=ec2-user\n'
-        printf 'SSH_KEY_PATH=%s/.ssh/id_rsa\n' "$HOME"
+        printf 'SSH_KEY_PATH=%q\n' "$HOME/.ssh/id_rsa"
     } >"$temporary"
     chmod 0600 "$temporary"
     mv "$temporary" "$STATE_FILE"
-}
+)
 
 state_value() {
     local key=$1

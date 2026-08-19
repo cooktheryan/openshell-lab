@@ -14,6 +14,18 @@ MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 MAX_PULL_PAGES = 10
 
 
+def _parse_github_timestamp(value: object, field: str) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError(f"GitHub {field} is not a timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValueError(f"GitHub {field} is not a valid timestamp") from error
+    if parsed.tzinfo is None:
+        raise ValueError(f"GitHub {field} has no timezone")
+    return parsed.astimezone(timezone.utc)
+
+
 def _curl_json(url: str, curl_bin: str = "/usr/bin/curl") -> object:
     process = subprocess.Popen(
         [
@@ -105,10 +117,20 @@ def fetch_recent_merges(curl_bin: str = "/usr/bin/curl") -> list[dict]:
             continue
         if len(page) < 100:
             return selected
-        tail_updated_at = page[-1].get("updated_at") if page else None
-        if not isinstance(tail_updated_at, str):
-            raise ValueError("GitHub pull page has no updated-time pagination boundary")
-        if tail_updated_at <= selected[-1]["merged_at"]:
+        try:
+            tail_updated_at = _parse_github_timestamp(
+                page[-1].get("updated_at") if page else None,
+                "updated-time pagination boundary",
+            )
+            cutoff = _parse_github_timestamp(
+                selected[-1]["merged_at"],
+                "merge cutoff",
+            )
+        except ValueError as error:
+            raise ValueError(
+                "GitHub pull page has an invalid updated-time pagination boundary"
+            ) from error
+        if tail_updated_at <= cutoff:
             return selected
     raise ValueError(
         f"could not prove the latest five merges within {MAX_PULL_PAGES} GitHub pages"
@@ -118,20 +140,30 @@ def fetch_recent_merges(curl_bin: str = "/usr/bin/curl") -> list[dict]:
 def select_recent_merges(pulls: list[dict], limit: int = 5) -> list[dict]:
     by_number = {}
     for pull in pulls:
-        if not isinstance(pull, dict) or not pull.get("merged_at"):
+        if not isinstance(pull, dict):
+            continue
+        merged_at = pull.get("merged_at")
+        if not isinstance(merged_at, str):
+            continue
+        try:
+            merged_time = _parse_github_timestamp(merged_at, "merge timestamp")
+        except ValueError:
             continue
         number = pull.get("number")
         if isinstance(number, bool) or not isinstance(number, int) or number < 1:
             continue
         current = by_number.get(number)
-        if current is None or pull["merged_at"] > current["merged_at"]:
-            by_number[number] = pull
+        if current is None or merged_time > current[1]:
+            by_number[number] = (pull, merged_time)
 
-    selected = sorted(
-        by_number.values(),
-        key=lambda pull: pull["merged_at"],
-        reverse=True,
-    )[:limit]
+    selected = [
+        pull
+        for pull, _merged_time in sorted(
+            by_number.values(),
+            key=lambda item: item[1],
+            reverse=True,
+        )[:limit]
+    ]
     if len(selected) != limit:
         raise ValueError(
             f"expected {limit} merged pull requests, found {len(selected)}"
@@ -140,18 +172,21 @@ def select_recent_merges(pulls: list[dict], limit: int = 5) -> list[dict]:
 
 
 _RELATIONSHIP = re.compile(
-    r"(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?|relate[sd]?(?:\s+to)?\s*:?|part\s+of|"
-    r"follows?|follow-up\s+to|depends\s+on|blocked\s+by)\s*$",
+    r"(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?|relate[sd]?(?:\s+to)?|part\s+of|"
+    r"follows?|follow-up\s+to|depends\s+on|blocked\s+by)\s*:?\s*$",
     re.IGNORECASE,
 )
 _NEGATED_RELATIONSHIP = re.compile(
     r"(?:does\s+not|did\s+not|not)\s+"
-    r"(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?|relate[sd]?(?:\s+to)?\s*:?|part\s+of|"
-    r"follows?|follow-up\s+to|depends?\s+on|blocked\s+by)\s*$",
+    r"(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?|relate[sd]?(?:\s+to)?|part\s+of|"
+    r"follows?|follow-up\s+to|depends?\s+on|blocked\s+by)\s*:?\s*$",
     re.IGNORECASE,
 )
 _ISSUE_REFERENCE = re.compile(
-    r"(?<![A-Za-z0-9_/])(?:(?:NVIDIA/OpenShell)#|#)([1-9][0-9]*)",
+    r"(?:"
+    r"(?<![A-Za-z0-9_/])(?:(?:NVIDIA/OpenShell)#|#)"
+    r"|https://github\.com/NVIDIA/OpenShell/(?:issues|pull)/"
+    r")([1-9][0-9]*)(?![A-Za-z0-9_])",
     re.IGNORECASE,
 )
 
@@ -190,7 +225,9 @@ def _label_names(item: dict) -> list[str]:
 
 
 def _related_item(issue: dict) -> dict:
-    number = issue["number"]
+    number = issue.get("number") if isinstance(issue, dict) else None
+    if isinstance(number, bool) or not isinstance(number, int) or number < 1:
+        raise ValueError("GitHub issue payload has no valid issue number")
     return {
         "number": number,
         "title": issue.get("title") or "",

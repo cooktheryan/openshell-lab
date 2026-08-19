@@ -15,6 +15,11 @@ from openshell_lab.tool_agent import MODEL_URL, build_chat_request
 FIXTURES = Path(__file__).parents[3] / "tests" / "fixtures" / "github"
 
 
+def _require(condition, message):
+    if not condition:
+        raise AssertionError(message)
+
+
 class LabChecks:
     """Thin behavior adapter over production report components."""
 
@@ -49,17 +54,26 @@ class LabChecks:
 
     def assert_five_unique_merges(self):
         selected = self.context.lab_state["selected"]
-        assert len(selected) == 5
-        assert len({pull["number"] for pull in selected}) == 5
-        assert all(pull["merged_at"] for pull in selected)
+        _require(len(selected) == 5, "expected exactly five merges")
+        _require(
+            len({pull["number"] for pull in selected}) == 5,
+            "expected five unique merges",
+        )
+        _require(all(pull["merged_at"] for pull in selected), "merge timestamp missing")
 
     def assert_merge_order(self):
         selected = self.context.lab_state["selected"]
         timestamps = [pull["merged_at"] for pull in selected]
-        assert timestamps == sorted(timestamps, reverse=True)
+        _require(
+            timestamps == sorted(timestamps, reverse=True),
+            "merges are not newest first",
+        )
 
     def assert_explicit_issues(self):
-        assert self.context.lab_state["issue_numbers"] == [50]
+        _require(
+            self.context.lab_state["issue_numbers"] == [50],
+            "unexpected issue relationship set",
+        )
 
     def load_report_fixture(self, state):
         pulls = json.loads((FIXTURES / "pulls.json").read_text(encoding="utf-8"))
@@ -154,7 +168,11 @@ class LabChecks:
         else:
             candidate = candidate_path.as_posix()
             allowed = any(
-                candidate == root or candidate.startswith(root.rstrip("/") + "/")
+                candidate == root
+                or (
+                    not root.startswith("/dev/")
+                    and candidate.startswith(root.rstrip("/") + "/")
+                )
                 for root in policy.get("read_write", [])
             )
         self.context.lab_state["filesystem_action"] = (
@@ -162,13 +180,17 @@ class LabChecks:
         )
 
     def assert_filesystem_action(self, status):
-        assert self.context.lab_state["filesystem_action"] == status
+        _require(status in {"allowed", "denied"}, f"unsupported status: {status}")
+        _require(
+            self.context.lab_state["filesystem_action"] == status,
+            f"expected filesystem action {status}",
+        )
 
     def assert_baseline_filesystem_posture(self):
         filesystem = self.context.lab_state["policy"]["filesystem_policy"]
-        assert filesystem["include_workdir"] is True
-        assert "/tmp" in filesystem["read_write"]
-        assert "/usr" in filesystem["read_only"]
+        _require(filesystem["include_workdir"] is True, "workdir must be included")
+        _require("/tmp" in filesystem["read_write"], "/tmp must be writable")
+        _require("/usr" in filesystem["read_only"], "/usr must be read-only")
 
     def _evaluate_network(self, binary, host, method):
         policy = self.context.lab_state["policy"]
@@ -201,7 +223,11 @@ class LabChecks:
         self._evaluate_network(binary, host, method)
 
     def assert_network_action(self, status):
-        assert self.context.lab_state["network_action"] == status
+        _require(status in {"allowed", "denied"}, f"unsupported status: {status}")
+        _require(
+            self.context.lab_state["network_action"] == status,
+            f"expected network action {status}",
+        )
 
     def load_configuration(self, configuration):
         if configuration == "managed inference route":
@@ -226,6 +252,11 @@ class LabChecks:
             self.context.lab_state["gpu_config"] = "\n".join(
                 path.read_text(encoding="utf-8") for path in paths
             )
+        elif configuration == "OpenShell release installation":
+            path = Path(__file__).parents[3] / "infra/remote/bootstrap-rhel10.sh"
+            self.context.lab_state["bootstrap_config"] = path.read_text(
+                encoding="utf-8"
+            )
         else:
             raise AssertionError(f"configuration not yet implemented: {configuration}")
 
@@ -240,7 +271,7 @@ class LabChecks:
                 self.context.lab_state["containerfile"],
                 re.MULTILINE,
             )
-            assert users, "Containerfile must declare a USER directive"
+            _require(users, "Containerfile must declare a USER directive")
             self.context.lab_state["image_user"] = users[-1]
         elif subject == "filesystem posture":
             self.context.lab_state["filesystem_evaluated"] = True
@@ -257,6 +288,20 @@ class LabChecks:
             self.context.lab_state["cpu_settings_valid"] = all(
                 item in text for item in required
             )
+        elif subject == "CPU launch safety":
+            text = self.context.lab_state["cpu_config"]
+            lock_position = text.find('launch_lock="${STATE_FILE}.launch.lock"')
+            state_position = text.find(
+                'write_cpu_state "$instance_id" "$subnet_id" '
+                '"$security_group_id" provisional'
+            )
+            wait_position = text.find("ec2 wait instance-running")
+            self.context.lab_state["cpu_launch_safety_valid"] = (
+                lock_position >= 0
+                and state_position >= 0
+                and wait_position >= 0
+                and state_position < wait_position
+            )
         elif subject == "GPU inference configuration":
             text = self.context.lab_state["gpu_config"]
             required = (
@@ -271,6 +316,17 @@ class LabChecks:
             self.context.lab_state["gpu_settings_valid"] = all(
                 item in text for item in required
             )
+        elif subject == "OpenShell release selection":
+            text = self.context.lab_state["bootstrap_config"]
+            required = (
+                "https://github.com/NVIDIA/OpenShell/releases/latest",
+                'OPENSHELL_VERSION="${latest_tag}" sh',
+                'installed_tag="v${installed_version#openshell }"',
+                '[[ "$installed_tag" != "$latest_tag" ]]',
+            )
+            self.context.lab_state["openshell_release_valid"] = all(
+                item in text for item in required
+            )
         elif subject == "repository safety":
             ignore = (
                 Path(__file__).parents[3] / ".gitignore"
@@ -283,28 +339,54 @@ class LabChecks:
 
     def assert_managed_request(self):
         request = self.context.lab_state["request"]
-        forbidden_keys = {"model", "api_key", "authorization", "x-api-key"}
+        forbidden_keys = {
+            "model",
+            "apikey",
+            "authorization",
+            "xapikey",
+            "token",
+            "accesstoken",
+            "bearertoken",
+        }
 
-        def contains_forbidden_key(value):
+        def contains_credential(value):
             if isinstance(value, dict):
                 return any(
-                    str(key).lower() in forbidden_keys
-                    or contains_forbidden_key(item)
+                    re.sub(r"[^a-z0-9]", "", str(key).lower()) in forbidden_keys
+                    or contains_credential(item)
                     for key, item in value.items()
                 )
             if isinstance(value, list):
-                return any(contains_forbidden_key(item) for item in value)
+                return any(contains_credential(item) for item in value)
+            if isinstance(value, str):
+                credential_patterns = (
+                    r"\b(?:Bearer|Basic)\s+\S+",
+                    r"sk-[A-Za-z0-9_-]{20,}",
+                    r"AKIA[0-9A-Z]{16}",
+                    r"gh[opusr]_[A-Za-z0-9_]{20,}",
+                    r"github_pat_[A-Za-z0-9_]{20,}",
+                    r"-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----",
+                )
+                return any(re.search(pattern, value, re.I) for pattern in credential_patterns)
             return False
 
         if MODEL_URL != "https://inference.local/v1/chat/completions":
             raise AssertionError(f"unexpected managed inference URL: {MODEL_URL}")
-        if contains_forbidden_key(request):
+        if contains_credential(request):
             raise AssertionError("managed request contains a model or credential field")
 
     def assert_nonroot_image(self):
-        user, group = self.context.lab_state["image_user"].split(":", 1)
-        assert user.isdigit() and group.isdigit()
-        assert int(user) > 0 and int(group) > 0
+        identity = self.context.lab_state["image_user"].split(":", 1)
+        user = identity[0]
+        group = identity[1] if len(identity) == 2 else None
+        _require(
+            user.isdigit() and (group is None or group.isdigit()),
+            "image USER must be numeric",
+        )
+        _require(
+            int(user) > 0 and (group is None or int(group) > 0),
+            "image USER must be non-root",
+        )
 
     def load_candidate_artifact(self, artifact_type):
         patterns = {
@@ -320,10 +402,22 @@ class LabChecks:
             raise AssertionError(f"unknown artifact type: {artifact_type}") from error
 
     def assert_artifact_excluded(self):
-        assert self.context.lab_state["artifact_excluded"] is True
+        _require(self.context.lab_state["artifact_excluded"] is True, "artifact is not excluded")
 
     def assert_cpu_settings(self):
-        assert self.context.lab_state["cpu_settings_valid"] is True
+        _require(self.context.lab_state["cpu_settings_valid"] is True, "CPU settings are invalid")
+
+    def assert_cpu_launch_safety(self):
+        _require(
+            self.context.lab_state["cpu_launch_safety_valid"] is True,
+            "CPU launch serialization or provisional state is missing",
+        )
 
     def assert_gpu_settings(self):
-        assert self.context.lab_state["gpu_settings_valid"] is True
+        _require(self.context.lab_state["gpu_settings_valid"] is True, "GPU settings are invalid")
+
+    def assert_latest_openshell_release(self):
+        _require(
+            self.context.lab_state["openshell_release_valid"] is True,
+            "bootstrap does not select and verify the latest stable OpenShell release",
+        )

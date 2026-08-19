@@ -19,6 +19,11 @@ curl --silent --show-error --fail-with-body \
     >"$published_report"
 test -s "$published_report"
 grep -F '# NVIDIA/OpenShell: Last 5 Merged Pull Requests' "$published_report" >/dev/null
+pr_count=$(grep -c '^## PR #[0-9]' "$published_report")
+[[ "$pr_count" -eq 5 ]] || {
+    printf 'published report contains %s PR sections, expected 5\n' "$pr_count" >&2
+    exit 1
+}
 openshell logs "$SANDBOX" --source sandbox -n 500 \
     >"$ROOT/evidence/lab3/sandbox.log"
 printf 'lab3 verification passed; sandbox and report service remain running\n'

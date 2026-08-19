@@ -26,6 +26,15 @@ class Lab4ArtifactTests(unittest.TestCase):
         self.assertIn("stop-instances", combined)
         self.assertNotIn("terminate-instances", combined)
 
+    def test_gpu_identity_uses_one_snapshot_and_exactly_one_security_group(self):
+        text = (AWS / "gpu-lib.sh").read_text(encoding="utf-8")
+        function = text.split("validate_gpu_instance()", 1)[1].split(
+            "write_gpu_state()", 1
+        )[0]
+        self.assertEqual(1, function.count("describe-instances"))
+        self.assertIn("length(SecurityGroups)", function)
+        self.assertIn("$'\\t'wide", function)
+
     def test_vllm_service_uses_the_exact_qwen_topology(self):
         text = (LAB / "configure-vllm.sh").read_text(encoding="utf-8")
         for required in (

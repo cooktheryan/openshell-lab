@@ -41,9 +41,25 @@ podman info --format '{{.Host.CgroupsVersion}}' | grep -Fx v2 >/dev/null
 
 installer=$(mktemp)
 trap 'rm -f "$installer"' EXIT
-curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh \
+latest_release_url=$(curl -LsSf -o /dev/null -w '%{url_effective}' \
+    https://github.com/NVIDIA/OpenShell/releases/latest)
+if [[ ! "$latest_release_url" =~ /tag/(v[0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+    printf 'unable to resolve a stable OpenShell release from %s\n' \
+        "$latest_release_url" >&2
+    exit 1
+fi
+latest_tag=${BASH_REMATCH[1]}
+curl -LsSf \
+    "https://raw.githubusercontent.com/NVIDIA/OpenShell/${latest_tag}/install.sh" \
     --output "$installer"
-sh "$installer"
+OPENSHELL_VERSION="${latest_tag}" sh "$installer"
+installed_version=$(openshell --version)
+installed_tag="v${installed_version#openshell }"
+if [[ "$installed_tag" != "$latest_tag" ]]; then
+    printf 'OpenShell version mismatch: expected %s, installed %s\n' \
+        "$latest_tag" "$installed_tag" >&2
+    exit 1
+fi
 
 install -d -m 0700 "$HOME/.config/openshell"
 config="$HOME/.config/openshell/gateway.toml"
@@ -63,11 +79,17 @@ if ! openshell gateway list --output json | jq -e \
     '.[] | select(.name == "openshell")' >/dev/null; then
     openshell gateway add --local https://127.0.0.1:17670
 fi
+gateway_ready=false
 for _ in $(seq 1 30); do
     if openshell status >/dev/null 2>&1; then
+        gateway_ready=true
         break
     fi
     sleep 2
 done
+if [[ "$gateway_ready" != true ]]; then
+    printf 'OpenShell gateway readiness timed out after 60 seconds\n' >&2
+    exit 1
+fi
 openshell status
 openshell whoami

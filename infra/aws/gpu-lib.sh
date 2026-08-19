@@ -23,27 +23,18 @@ gpu_field() {
 }
 
 validate_gpu_instance() {
-    local instance_type image_id project name owner key_name security_group
-    instance_type=$(gpu_field InstanceType)
-    image_id=$(gpu_field ImageId)
-    project=$(gpu_field "Tags[?Key=='Project'].Value | [0]")
-    name=$(gpu_field "Tags[?Key=='Name'].Value | [0]")
-    owner=$(gpu_field "Tags[?Key=='Owner'].Value | [0]")
-    key_name=$(gpu_field KeyName)
-    security_group=$(gpu_field "SecurityGroups[0].GroupName")
-    [[ "$instance_type" == "$GPU_INSTANCE_TYPE" \
-        && "$image_id" == "$GPU_AMI_ID" \
-        && "$project" == "$GPU_PROJECT_TAG" \
-        && "$name" == "$GPU_NAME_TAG" \
-        && "$owner" == "$GPU_OWNER_TAG" \
-        && "$key_name" == "rcook" \
-        && "$security_group" == "wide" ]] || {
+    local snapshot expected
+    snapshot=$(gpu_aws ec2 describe-instances --instance-ids "$GPU_INSTANCE_ID" \
+        --query "Reservations[0].Instances[0].[InstanceType,ImageId,Tags[?Key=='Project'].Value | [0],Tags[?Key=='Name'].Value | [0],Tags[?Key=='Owner'].Value | [0],KeyName,length(SecurityGroups),SecurityGroups[0].GroupName]" \
+        --output text)
+    expected="$GPU_INSTANCE_TYPE"$'\t'"$GPU_AMI_ID"$'\t'"$GPU_PROJECT_TAG"$'\t'"$GPU_NAME_TAG"$'\t'"$GPU_OWNER_TAG"$'\t'rcook$'\t'1$'\t'wide
+    [[ "$snapshot" == "$expected" ]] || {
         printf 'GPU instance identity validation failed; refusing mutation\n' >&2
         exit 1
     }
 }
 
-write_gpu_state() {
+write_gpu_state() (
     local public_ip private_ip temporary
     public_ip=$(gpu_field PublicIpAddress)
     private_ip=$(gpu_field PrivateIpAddress)
@@ -55,13 +46,13 @@ write_gpu_state() {
     umask 077
     temporary=$(mktemp "${GPU_STATE_FILE}.XXXXXX")
     {
-        printf 'AWS_REGION=%s\n' "$GPU_REGION"
-        printf 'INSTANCE_ID=%s\n' "$GPU_INSTANCE_ID"
-        printf 'PUBLIC_IP=%s\n' "$public_ip"
-        printf 'PRIVATE_IP=%s\n' "$private_ip"
+        printf 'AWS_REGION=%q\n' "$GPU_REGION"
+        printf 'INSTANCE_ID=%q\n' "$GPU_INSTANCE_ID"
+        printf 'PUBLIC_IP=%q\n' "$public_ip"
+        printf 'PRIVATE_IP=%q\n' "$private_ip"
         printf 'SSH_USER=ec2-user\n'
-        printf 'SSH_KEY_PATH=%s/.ssh/id_rsa\n' "$HOME"
+        printf 'SSH_KEY_PATH=%q\n' "$HOME/.ssh/id_rsa"
     } >"$temporary"
     chmod 0600 "$temporary"
     mv "$temporary" "$GPU_STATE_FILE"
-}
+)

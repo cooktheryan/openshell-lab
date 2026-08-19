@@ -111,6 +111,39 @@ class ToolAgentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "8 MiB"):
                 tool_agent._curl_json(str(fake_curl), "https://example.test")
 
+    def test_non_utf8_json_response_is_a_controlled_validation_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fake_curl = Path(directory) / "curl"
+            fake_curl.write_text(
+                "#!/usr/bin/env python3\nimport sys\nsys.stdout.buffer.write(b'\\xff')\n",
+                encoding="utf-8",
+            )
+            fake_curl.chmod(fake_curl.stat().st_mode | stat.S_IXUSR)
+            with self.assertRaisesRegex(ValueError, "invalid JSON"):
+                tool_agent._curl_json(str(fake_curl), "https://example.test")
+
+    def test_request_stream_closes_if_payload_write_fails(self):
+        class FailedStream:
+            closed = False
+
+            def write(self, _payload):
+                raise OSError("temporary storage failed")
+
+            def close(self):
+                self.closed = True
+
+        stream = FailedStream()
+        with patch.object(tool_agent.tempfile, "TemporaryFile", return_value=stream), patch.object(
+            tool_agent.subprocess, "Popen"
+        ) as popen, self.assertRaisesRegex(OSError, "temporary storage"):
+            tool_agent._curl_json(
+                "/usr/bin/curl",
+                "https://inference.local/v1/chat/completions",
+                {"messages": []},
+            )
+        self.assertTrue(stream.closed)
+        popen.assert_not_called()
+
     def test_model_request_body_is_sent_on_standard_input(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -132,19 +165,9 @@ class ToolAgentTests(unittest.TestCase):
                 )
             self.assertEqual("private prompt", json.loads(captured.read_text())["messages"][0]["content"])
 
-    def test_broken_pipe_while_closing_request_still_reads_curl_status(self):
-        class BrokenClose(io.BytesIO):
-            first_close = True
-
-            def close(self):
-                if self.first_close:
-                    self.first_close = False
-                    raise BrokenPipeError
-                super().close()
-
+    def test_request_body_uses_seekable_input_without_a_pipe_write_deadlock(self):
         class FakeProcess:
             def __init__(self):
-                self.stdin = BrokenClose()
                 self.stdout = io.BytesIO(b"{}")
 
             def wait(self):
@@ -156,7 +179,13 @@ class ToolAgentTests(unittest.TestCase):
             def kill(self):
                 raise AssertionError("completed process should not be killed")
 
-        with patch.object(tool_agent.subprocess, "Popen", return_value=FakeProcess()):
+        def fake_popen(_command, *, stdin, stdout, stderr):
+            del stdout, stderr
+            self.assertTrue(stdin.seekable())
+            self.assertEqual({"messages": []}, json.loads(stdin.read()))
+            return FakeProcess()
+
+        with patch.object(tool_agent.subprocess, "Popen", side_effect=fake_popen):
             self.assertEqual(
                 {},
                 tool_agent._curl_json(

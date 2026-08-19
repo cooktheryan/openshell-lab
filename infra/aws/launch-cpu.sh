@@ -6,6 +6,13 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 source "$SCRIPT_DIR/lib.sh"
 
 require_command aws
+mkdir -p "$(dirname -- "$STATE_FILE")"
+launch_lock="${STATE_FILE}.launch.lock"
+if ! mkdir -- "$launch_lock"; then
+    printf 'another CPU launch is already in progress: %s\n' "$launch_lock" >&2
+    exit 1
+fi
+trap 'rmdir -- "$launch_lock"' EXIT
 
 if [[ -f "$STATE_FILE" ]]; then
     load_cpu_state
@@ -83,6 +90,7 @@ instance_id=$(aws_cli ec2 run-instances \
     exit 1
 }
 printf 'launched %s; waiting for EC2 health checks\n' "$instance_id" >&2
+write_cpu_state "$instance_id" "$subnet_id" "$security_group_id" provisional
 aws_cli ec2 wait instance-running --instance-ids "$instance_id"
 aws_cli ec2 wait instance-status-ok --instance-ids "$instance_id"
 validate_project_instance "$instance_id"

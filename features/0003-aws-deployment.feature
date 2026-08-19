@@ -11,6 +11,15 @@ Feature: AWS lab deployment
       Then the launch should use the approved CPU settings
 
   @security
+  @event-driven
+  Rule: When a CPU launch is requested, the launcher shall serialize local launches and persist the new instance identity before health waits.
+
+    Scenario: CPU launch failure retains a recoverable instance identity
+      Given the "CPU launch" configuration is available
+      When the "CPU launch safety" is evaluated
+      Then the launcher should serialize launches and persist provisional state
+
+  @security
   @ubiquitous
   Rule: The lab repository shall exclude credential and private-key material from version control.
 
@@ -27,10 +36,19 @@ Feature: AWS lab deployment
         | TLS private key     |
         | model cache         |
 
+  @security
+  @event-driven
+  Rule: When the RHEL bootstrap installs OpenShell, the bootstrap shall select and verify the current stable NVIDIA release.
+
+    Scenario: OpenShell installation follows the latest stable release
+      Given the "OpenShell release installation" configuration is available
+      When the "OpenShell release selection" is evaluated
+      Then the bootstrap should resolve and verify the latest stable release
+
   @state-driven
-  Rule: While Lab 4 is active, the GPU deployment shall serve Qwen3.6-27B through four L40S GPUs with a 32768-token context limit.
+  Rule: While Lab 4 is active, the GPU deployment configuration shall declare Qwen3.6-27B through four L40S GPUs with a 32768-token context limit.
 
     Scenario: GPU inference settings match the validated topology
       Given the "GPU deployment" configuration is available
       When the "GPU inference configuration" is evaluated
-      Then the deployment should use the validated Qwen topology
+      Then the deployment configuration should declare the validated Qwen topology

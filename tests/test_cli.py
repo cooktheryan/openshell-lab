@@ -11,8 +11,11 @@ from openshell_lab import cli
 
 class CliTests(unittest.TestCase):
     def test_cli_does_not_expose_an_executable_override(self):
-        with self.assertRaises(SystemExit):
+        with patch.object(cli, "run_tool_loop") as run_tool_loop, self.assertRaises(
+            SystemExit
+        ):
             cli.main(["--output", "report.md", "--curl-bin", "./curl"])
+        run_tool_loop.assert_not_called()
 
     def test_cli_publishes_only_sanitized_json_status(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -50,12 +53,14 @@ class CliTests(unittest.TestCase):
 
     def test_cli_returns_nonzero_without_leaking_internal_error(self):
         stderr = io.StringIO()
+        stdout = io.StringIO()
         with patch.object(
             cli, "run_tool_loop", side_effect=RuntimeError("secret transport detail")
-        ), redirect_stderr(stderr):
+        ), redirect_stderr(stderr), redirect_stdout(stdout):
             status = cli.main(["--output", "report.md"])
         self.assertNotEqual(0, status)
         self.assertEqual('{"status":"failed"}\n', stderr.getvalue())
+        self.assertEqual("", stdout.getvalue())
 
     def test_cli_normalization_failure_is_sanitized(self):
         stderr = io.StringIO()

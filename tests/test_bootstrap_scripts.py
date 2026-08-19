@@ -44,11 +44,25 @@ class BootstrapScriptTests(unittest.TestCase):
 
     def test_uses_official_installer_and_verifies_gateway(self):
         self.assertIn(
-            "https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh",
+            'https://raw.githubusercontent.com/NVIDIA/OpenShell/${latest_tag}/install.sh',
             self.text,
         )
+        self.assertNotIn("NVIDIA/OpenShell/main/install.sh", self.text)
         self.assertIn("openshell status", self.text)
         self.assertIn("openshell whoami", self.text)
+
+    def test_resolves_pins_and_verifies_latest_stable_openshell_release(self):
+        self.assertIn(
+            "https://github.com/NVIDIA/OpenShell/releases/latest",
+            self.text,
+        )
+        self.assertRegex(self.text, r'OPENSHELL_VERSION="\$\{latest_tag\}"\s+sh')
+        self.assertIn('installed_tag="v${installed_version#openshell }"', self.text)
+        self.assertIn('[[ "$installed_tag" != "$latest_tag" ]]', self.text)
+
+    def test_gateway_readiness_timeout_is_explicit(self):
+        self.assertIn("gateway_ready=false", self.text)
+        self.assertIn("OpenShell gateway readiness timed out", self.text)
 
 
 if __name__ == "__main__":

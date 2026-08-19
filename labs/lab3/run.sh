@@ -25,7 +25,7 @@ while openshell sandbox list --names | grep -Fx "$SANDBOX" >/dev/null; do
     sleep 1
 done
 podman unshare rm -f /var/www/html/openshell-lab/nvidia-openshell-last-5-merges.md
-openshell forward stop 18080 openshell-lab2 >/dev/null 2>&1 || true
+openshell forward stop 18080 openshell-lab3 >/dev/null 2>&1 || true
 
 openshell sandbox create \
     --name "$SANDBOX" \
@@ -50,6 +50,7 @@ if openshell sandbox exec \
     exit 1
 fi
 printf 'expected denied report run was blocked\n'
+podman unshare rm -f /var/www/html/openshell-lab/nvidia-openshell-last-5-merges.md
 
 openshell policy set "$SANDBOX" --policy "$ALLOW_POLICY" --wait --timeout 120
 openshell policy get "$SANDBOX" --base --output json \

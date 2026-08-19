@@ -53,6 +53,7 @@ Feature: OpenShell agent controls
         | /home    |
         | /etc     |
         | /tmp/../etc |
+        | /dev/null/child |
 
   @ubiquitous
   Rule: The containerized report agent shall run with a non-root OCI identity.

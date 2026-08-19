@@ -21,5 +21,5 @@ elif [[ "$current_state" != "running" && "$current_state" != "pending" ]]; then
 fi
 aws_cli ec2 wait instance-running --instance-ids "$INSTANCE_ID"
 aws_cli ec2 wait instance-status-ok --instance-ids "$INSTANCE_ID"
-write_cpu_state "$INSTANCE_ID" "$(state_value SUBNET_ID)" "$(state_value SECURITY_GROUP_ID)"
+write_cpu_state "$INSTANCE_ID" "$SUBNET_ID" "$SECURITY_GROUP_ID"
 printf '%s\n' "$INSTANCE_ID"

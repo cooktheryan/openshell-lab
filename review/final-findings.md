@@ -5,6 +5,29 @@ Raw JSON remains local and gitignored under `review/ocr-*.json`.
 
 ## Implemented findings
 
+- Resolved the latest stable NVIDIA/OpenShell release, fetched the installer
+  from that immutable release tag, and verified the installed CLI version.
+- Serialized CPU launches, persisted provisional instance identity before
+  health waits, validated lifecycle state fields, and handled pending/stopping
+  transitions explicitly.
+- Validated GPU identity from one EC2 snapshot and required exactly one approved
+  security group; shell-escaped sourceable state and scoped restrictive umasks.
+- Fixed Lab 3 stale-forward cleanup, removed partial denied output, and required
+  exactly five PR sections in the served report.
+- Made the installed home-directory runner owner-only, validated every lab
+  entrypoint, and cleared OpenAI credentials on every configuration exit path.
+- Paginated all active Quay tags, retained the stable immutable base-image
+  digest, and cleaned temporary resolver artifacts on failure.
+- Rejected fenced-heading spoofing, duplicate/unapproved report sections, and
+  model-authored evidence indexes before deterministic publication.
+- Recognized colon-form and full-URL GitHub issue relationships while retaining
+  negation handling.
+- Parsed GitHub merge and pagination timestamps as timezone-aware UTC values,
+  rejected malformed boundaries, and ordered offset timestamps chronologically.
+- Made atomic publication skip unsupported Windows directory fsync while
+  retaining durability-error propagation on supported POSIX filesystems.
+- Distinguished writable device files from directory roots and hardened the
+  managed-request credential detector against aliases and bearer values.
 - Made Behave step imports package-qualified and idempotent.
 - Rejected writable-prefix traversal and recursively detected secret-bearing request keys.
 - Asserted a numeric non-root container user with an explicit failure.
@@ -28,5 +51,20 @@ Raw JSON remains local and gitignored under `review/ocr-*.json`.
 - The sandbox request deliberately omits `model`. OpenShell's `inference.local` route injects the operator-selected provider and model, allowing the same image to use GPT-5.5 or Qwen without exposing provider configuration.
 - CLI failures deliberately retain a generic machine-readable error rather than returning exception text that may contain transport or credential details.
 - GitHub access remains unauthenticated by design. Passing a GitHub token into the sandbox would expand the credential surface for a public-repository demonstration; bounded pagination fails closed if the public rate limit is unavailable.
+- The read-only `/etc` and `/proc` paths and writable `/tmp` and `/dev/null`
+  entries are OpenShell's observed runtime baseline. `/var/www/html` is confined
+  by the Podman driver to the dedicated host subtree
+  `/var/www/html/openshell-lab`; the evidence files record effective policy and
+  are not hand-edited into an aspirational shape.
+- Lab 2's user-wide bind-mount driver capability and Apache SELinux boolean are
+  explicit single-server workshop prerequisites. The lab validates the one
+  reviewed mount at runtime; production multi-tenant deployments should use a
+  separately scoped gateway rather than reuse this profile.
+- `configure-openshell.sh --no-verify` is limited to the already-probed,
+  host-local vLLM endpoint. No provider credential crosses into the sandbox.
 
-The broad scans reached their token budgets after reviewing 85 and 56 files. The follow-up source-only scans completed without budget warnings so production fixes could be reviewed independently.
+The full-filesystem review was continued across multiple token-budget windows;
+raw review sessions remain gitignored. A focused post-fix scan and the complete
+local verification gate provide the final acceptance evidence. The final
+source-validation scans completed successfully without scan warnings; every
+reported source finding was reproduced, regression-tested, and fixed.

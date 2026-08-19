@@ -80,7 +80,7 @@ class ReportTests(unittest.TestCase):
 
     def test_rejects_missing_pull_request_section(self):
         markdown = self.valid_markdown().replace("## PR #100:", "## OMITTED #100:")
-        with self.assertRaisesRegex(ValueError, "headings"):
+        with self.assertRaisesRegex(ValueError, "(?:headings|unexpected heading)"):
             validate_markdown(markdown, self.evidence)
 
     def test_rejects_empty_evidence(self):
@@ -94,6 +94,47 @@ class ReportTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "unterminated"):
             validate_markdown(markdown, self.evidence)
+
+    def test_rejects_pull_request_headings_inside_balanced_fences(self):
+        markdown = self.valid_markdown()
+        first = markdown.index("## PR #105:")
+        markdown = markdown[:first] + "```markdown\n" + markdown[first:] + "```\n"
+        with self.assertRaisesRegex(ValueError, "headings|fenced code blocks"):
+            validate_markdown(markdown, self.evidence)
+
+    def test_rejects_unapproved_top_level_sections(self):
+        markdown = self.valid_markdown() + "\n## Appendix\nUntrusted model prose.\n"
+        with self.assertRaisesRegex(ValueError, "unexpected heading"):
+            validate_markdown(markdown, self.evidence)
+
+    def test_rejects_duplicate_contract_headings(self):
+        markdown = self.valid_markdown().replace(
+            "## Executive Summary\n",
+            "## Executive Summary\nFirst.\n## Executive Summary\n",
+            1,
+        )
+        with self.assertRaisesRegex(ValueError, "exactly one executive summary"):
+            validate_markdown(markdown, self.evidence)
+
+    def test_rejects_deep_or_duplicate_metadata_structure(self):
+        deep = self.valid_markdown() + "\n#### Unapproved detail\n"
+        duplicate = self.valid_markdown().replace(
+            "- Author: alice",
+            "- Author: alice\n- Author: contradictory",
+            1,
+        )
+        for markdown in (deep, duplicate):
+            with self.subTest(markdown=markdown[-80:]):
+                with self.assertRaisesRegex(ValueError, "unexpected heading|duplicate"):
+                    validate_markdown(markdown, self.evidence)
+
+    def test_heading_names_may_be_mentioned_in_prose(self):
+        markdown = self.valid_markdown().replace(
+            "The evidence shows a focused repository change.",
+            "The phrase ### What changed is part of this evidence summary.",
+            1,
+        )
+        self.assertTrue(validate_markdown(markdown, self.evidence).startswith(REPORT_TITLE))
 
     def test_rejects_credential_material(self):
         credentials = (
@@ -149,6 +190,14 @@ class ReportTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(OSError, "durability failure"):
                 write_report(Path(directory) / "report.md", "content")
+
+    def test_windows_skips_unsupported_directory_fsync_after_publication(self):
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "openshell_lab.report.DIRECTORY_FSYNC_SUPPORTED", False
+        ):
+            report = Path(directory) / "report.md"
+            write_report(report, "content")
+            self.assertEqual("content", report.read_text(encoding="utf-8"))
 
     def test_cleanup_failure_does_not_mask_original_write_failure(self):
         with tempfile.TemporaryDirectory() as directory, patch(
