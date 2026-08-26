@@ -1,8 +1,14 @@
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
+
+from test_support.shell_lab_harness import (
+    restricted_search_path,
+    run_secret_scan_with_failing_search,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,7 +31,7 @@ class RepositorySafetyTests(unittest.TestCase):
         }
         self.assertTrue(required.issubset(patterns), required - patterns)
 
-    def _scan(self, filename, content):
+    def _scan(self, filename, content, *, path=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             subprocess.run(["git", "init", "-q", str(root)], check=True)
@@ -35,7 +41,11 @@ class RepositorySafetyTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
                 check=False,
-                env={**os.environ, "LC_ALL": "C"},
+                env={
+                    **os.environ,
+                    "LC_ALL": "C",
+                    **({"PATH": path} if path is not None else {}),
+                },
             )
 
     def test_scanner_rejects_openai_secret_without_printing_it(self):
@@ -63,6 +73,26 @@ class RepositorySafetyTests(unittest.TestCase):
     def test_scanner_allows_unassigned_credential_variable_name(self):
         result = self._scan("safe.sh", "export OPENAI_API_KEY\nunset OPENAI_API_KEY\n")
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_scanner_rejects_secret_when_ripgrep_is_unavailable(self):
+        secret = "sk-" + "B" * 32
+        search_path = restricted_search_path()
+        self.addCleanup(shutil.rmtree, search_path)
+        result = self._scan(
+            "unsafe.txt",
+            f"OPENAI_API_KEY={secret}\n",
+            path=search_path,
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("unsafe.txt", result.stdout)
+        self.assertNotIn("command not found", result.stderr)
+        self.assertNotIn(secret, result.stdout + result.stderr)
+
+    def test_scanner_fails_closed_when_search_tool_errors(self):
+        result = run_secret_scan_with_failing_search(SCANNER)
+        self.assertEqual(2, result.returncode)
+        self.assertIn("search failed", result.stderr)
+        self.assertNotIn("secret-scan: clean", result.stdout)
 
 
 if __name__ == "__main__":

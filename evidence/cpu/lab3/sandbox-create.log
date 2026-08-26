@@ -1,0 +1,4 @@
+  [1m[32m✓[39m[0m Forwarding port 18080 to sandbox openshell-lab3 in the background
+
+  Access at: http://127.0.0.1:18080/
+  Stop with: openshell forward stop 18080 openshell-lab3

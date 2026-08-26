@@ -9,7 +9,17 @@ from openshell_lab.github_evidence import (
     select_recent_merges,
 )
 from openshell_lab.report import REPORT_TITLE, validate_markdown
-from openshell_lab.tool_agent import MODEL_URL, build_chat_request
+from openshell_lab.tool_agent import (
+    MODEL_URL,
+    build_chat_request,
+    recoverable_tool_error,
+)
+from test_support.shell_lab_harness import (
+    run_cpu_lab_sequence,
+    run_forwarded_launcher,
+    run_secret_scan_with_failing_search,
+    run_secret_scan_without_rg,
+)
 
 
 FIXTURES = Path(__file__).parents[3] / "tests" / "fixtures" / "github"
@@ -257,6 +267,40 @@ class LabChecks:
             self.context.lab_state["bootstrap_config"] = path.read_text(
                 encoding="utf-8"
             )
+        elif configuration == "sandbox launchers":
+            root = Path(__file__).parents[3]
+            self.context.lab_state["sandbox_launchers"] = {
+                lab: (root / "labs" / lab / "run.sh").read_text(encoding="utf-8")
+                for lab in ("lab1", "lab2", "lab3", "lab4")
+            }
+        elif configuration == "Lab 4 launcher":
+            path = Path(__file__).parents[3] / "labs" / "lab4" / "run.sh"
+            self.context.lab_state["lab4_launcher"] = path.read_text(
+                encoding="utf-8"
+            )
+        elif configuration == "Lab 1 launcher":
+            path = Path(__file__).parents[3] / "labs" / "lab1" / "run.sh"
+            self.context.lab_state["lab1_launcher"] = path.read_text(
+                encoding="utf-8"
+            )
+        elif configuration == "forwarded sandbox launchers":
+            self.context.lab_state["repository_root"] = Path(__file__).parents[3]
+        elif configuration == "CPU lab sequence":
+            self.context.lab_state["cpu_sequence_path"] = (
+                Path(__file__).parents[3] / "infra" / "remote" / "run-cpu-labs.sh"
+            )
+        elif configuration == "secret scanner without ripgrep":
+            self.context.lab_state["secret_scanner_path"] = (
+                Path(__file__).parents[3] / "scripts" / "scan-secrets.sh"
+            )
+        elif configuration == "invalid evidence tool call":
+            self.context.lab_state["tool_error"] = ValueError(
+                "issue is not explicitly referenced by a selected pull request"
+            )
+        elif configuration == "failing secret search tool":
+            self.context.lab_state["secret_scanner_path"] = (
+                Path(__file__).parents[3] / "scripts" / "scan-secrets.sh"
+            )
         else:
             raise AssertionError(f"configuration not yet implemented: {configuration}")
 
@@ -326,6 +370,68 @@ class LabChecks:
             )
             self.context.lab_state["openshell_release_valid"] = all(
                 item in text for item in required
+            )
+        elif subject == "canonical sandbox process configuration":
+            launchers = self.context.lab_state["sandbox_launchers"]
+            self.context.lab_state["durable_canonical_processes"] = {
+                lab: "-- /usr/bin/sleep infinity" in text and "-- /bin/true" not in text
+                for lab, text in launchers.items()
+            }
+        elif subject == "loopback forward cleanup":
+            text = self.context.lab_state["lab4_launcher"]
+            self.context.lab_state["lab4_forward_cleanup_valid"] = (
+                'openshell forward stop 18080 "$SANDBOX"' in text
+                and "openshell forward stop 18080 openshell-lab3" not in text
+            )
+        elif subject == "source upload ordering":
+            text = self.context.lab_state["lab1_launcher"]
+            create_position = text.find("openshell sandbox create")
+            upload_position = text.find("openshell sandbox upload")
+            exec_position = text.find("openshell sandbox exec")
+            upload_line = next(
+                (
+                    line
+                    for line in text.splitlines()
+                    if line.startswith("openshell sandbox upload ")
+                ),
+                "",
+            )
+            self.context.lab_state["lab1_upload_ordering_valid"] = (
+                '--upload "$ROOT/src:/sandbox"' not in text
+                and upload_position >= 0
+                and create_position < upload_position < exec_position
+                and upload_line
+                == 'openshell sandbox upload "$SANDBOX" "$ROOT/src" /sandbox >/dev/null'
+            )
+        elif subject == "non-interactive forward lifecycle":
+            root = self.context.lab_state["repository_root"]
+            self.context.lab_state["forwarded_launcher_results"] = {
+                lab: run_forwarded_launcher(root, lab)
+                for lab in ("lab2", "lab3", "lab4")
+            }
+        elif subject == "CPU forward lifecycle":
+            path = self.context.lab_state["cpu_sequence_path"]
+            self.context.lab_state["cpu_sequence_events"] = (
+                run_cpu_lab_sequence(path) if path.is_file() else []
+            )
+        elif subject == "secret scanner fallback":
+            secret, result = run_secret_scan_without_rg(
+                self.context.lab_state["secret_scanner_path"]
+            )
+            self.context.lab_state["scanner_secret"] = secret
+            self.context.lab_state["scanner_result"] = result
+        elif subject == "tool validation recovery":
+            self.context.lab_state["tool_retry"] = recoverable_tool_error(
+                "inspect_linked_issue",
+                self.context.lab_state["tool_error"],
+                4,
+                16,
+            )
+        elif subject == "secret search tool failure":
+            self.context.lab_state["scanner_failure_result"] = (
+                run_secret_scan_with_failing_search(
+                    self.context.lab_state["secret_scanner_path"]
+                )
             )
         elif subject == "repository safety":
             ignore = (
@@ -421,3 +527,83 @@ class LabChecks:
             self.context.lab_state["openshell_release_valid"] is True,
             "bootstrap does not select and verify the latest stable OpenShell release",
         )
+
+    def assert_durable_canonical_processes(self):
+        results = self.context.lab_state["durable_canonical_processes"]
+        failures = [lab for lab, is_durable in results.items() if not is_durable]
+        _require(
+            not failures,
+            "short-lived canonical process configured for: " + ", ".join(failures),
+        )
+
+    def assert_lab4_forward_cleanup(self):
+        _require(
+            self.context.lab_state["lab4_forward_cleanup_valid"] is True,
+            "Lab 4 forward cleanup does not target the active sandbox",
+        )
+
+    def assert_lab1_upload_ordering(self):
+        _require(
+            self.context.lab_state["lab1_upload_ordering_valid"] is True,
+            "Lab 1 source upload conflicts with creation or is out of order",
+        )
+
+    def assert_forwarded_launchers_release_session(self):
+        results = self.context.lab_state["forwarded_launcher_results"]
+        failures = [
+            lab
+            for lab, result in results.items()
+            if not result.completed
+            or result.returncode != 0
+            or "sandbox-created" not in result.create_log
+            or "forward-ready" not in result.create_log
+        ]
+        _require(
+            not failures,
+            "forwarded launchers retained the invoking session: "
+            + ", ".join(failures),
+        )
+
+    def assert_cpu_forward_sequence(self):
+        events = self.context.lab_state["cpu_sequence_events"]
+        _require(events, "CPU lab sequence runner is missing")
+        lab2_verified = events.index("lab2-verify")
+        lab2_stopped = events.index("forward-stop:18080:openshell-lab2")
+        lab3_started = events.index("lab3-build")
+        _require(
+            lab2_verified < lab2_stopped < lab3_started,
+            "Lab 2 forward was not stopped between Lab 2 verification and Lab 3",
+        )
+
+    def assert_secret_scanner_fallback(self):
+        result = self.context.lab_state["scanner_result"]
+        secret = self.context.lab_state["scanner_secret"]
+        output = result.stdout + result.stderr
+        _require(result.returncode != 0, "secret scanner falsely reported clean")
+        _require("unsafe.txt" in result.stdout, "scanner omitted the unsafe path")
+        _require("command not found" not in result.stderr, "scanner invoked missing rg")
+        _require(secret not in output, "scanner exposed credential content")
+
+    def assert_bounded_tool_retry(self):
+        result = self.context.lab_state["tool_retry"]
+        _require(result["retry"] is True, "tool error is not recoverable")
+        _require(
+            "explicitly referenced" in result["detail"],
+            "retry guidance omitted the evidence boundary",
+        )
+        try:
+            recoverable_tool_error(
+                "inspect_linked_issue",
+                self.context.lab_state["tool_error"],
+                16,
+                16,
+            )
+        except ValueError:
+            return
+        raise AssertionError("tool validation remained recoverable past the call limit")
+
+    def assert_secret_search_failure(self):
+        result = self.context.lab_state["scanner_failure_result"]
+        _require(result.returncode == 2, "search tool error did not fail the scan")
+        _require("search failed" in result.stderr, "search failure was not reported")
+        _require("secret-scan: clean" not in result.stdout, "scan falsely reported clean")

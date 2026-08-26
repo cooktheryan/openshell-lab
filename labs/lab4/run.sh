@@ -21,13 +21,18 @@ while openshell sandbox list --names | grep -Fx "$SANDBOX" >/dev/null; do
     }
     sleep 1
 done
-openshell forward stop 18080 openshell-lab3 >/dev/null 2>&1 || true
+openshell forward stop 18080 "$SANDBOX" >/dev/null 2>&1 || true
 podman unshare rm -f /var/www/html/openshell-lab/nvidia-openshell-last-5-merges.md
 
-openshell sandbox create --name "$SANDBOX" --from "$IMAGE" \
-    --policy "$POLICY" --driver-config-json "$DRIVER_CONFIG" \
-    --forward 127.0.0.1:18080 --no-tty -- /bin/true >/dev/null
 mkdir -p "$ROOT/evidence/gpu"
+CREATE_LOG="$ROOT/evidence/gpu/sandbox-create.log"
+if ! openshell sandbox create --name "$SANDBOX" --from "$IMAGE" \
+    --policy "$POLICY" --driver-config-json "$DRIVER_CONFIG" \
+    --forward 127.0.0.1:18080 --no-tty -- /usr/bin/sleep infinity \
+    > /dev/null 2>"$CREATE_LOG"; then
+    cat "$CREATE_LOG" >&2
+    exit 1
+fi
 openshell sandbox exec --name "$SANDBOX" --no-tty \
     --workdir /opt/openshell-lab --timeout 1800 -- \
     python3 -m openshell_lab.cli \

@@ -228,6 +228,51 @@ class ToolAgentTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             tool_agent.recoverable_tool_error("write_report", error, 16, 16)
 
+    def test_invalid_evidence_tool_call_can_be_corrected_within_limit(self):
+        responses = [
+            model_tool_call("call-list", "list_recent_merges", '{"limit":5}'),
+            model_tool_call(
+                "call-issue", "inspect_linked_issue", '{"number":43}'
+            ),
+            model_tool_call("call-write", "write_report", '{"markdown":"valid"}'),
+        ]
+        original_dispatch = tool_agent.dispatch_tool
+
+        def bounded_dispatch(name, arguments, state):
+            if name == "list_recent_merges":
+                state.selected_pulls = [
+                    {"number": number, "body": "Fixes #42 and discusses issue 43"}
+                    for number in range(5, 0, -1)
+                ]
+                state.selected_numbers = [5, 4, 3, 2, 1]
+                return {"pull_requests": state.selected_numbers}
+            if name == "write_report":
+                state.report_published = True
+                return {"published": True}
+            return original_dispatch(name, arguments, state)
+
+        captured_requests = []
+
+        def model_response(_curl_bin, _url, request_body):
+            captured_requests.append(request_body)
+            return responses[len(captured_requests) - 1]
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            tool_agent, "_curl_json", side_effect=model_response
+        ), patch.object(tool_agent, "dispatch_tool", side_effect=bounded_dispatch):
+            result = tool_agent.run_tool_loop(Path(directory) / "report.md")
+
+        self.assertEqual(3, result["tool_calls"])
+        retry_message = next(
+            message
+            for message in reversed(captured_requests[2]["messages"])
+            if message.get("role") == "tool"
+        )
+        retry_result = json.loads(retry_message["content"])
+        self.assertTrue(retry_result["retry"])
+        self.assertIn("explicitly referenced", retry_result["detail"])
+        self.assertNotIn("43", retry_result["detail"])
+
     def test_success_requires_write_report_tool(self):
         response = {"choices": [{"message": {"role": "assistant", "content": "done"}}]}
         with tempfile.TemporaryDirectory() as directory, patch.object(

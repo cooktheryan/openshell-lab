@@ -45,8 +45,10 @@ remote 'cd "$HOME/git/openshell-lab"; openshell logs openshell-lab1 --source san
 curl --silent --show-error --fail-with-body --max-time 30 \
     "http://$PUBLIC_IP/openshell-lab/nvidia-openshell-last-5-merges.md" \
     >"$EVIDENCE/nvidia-openshell-last-5-merges.md"
-shasum -a 256 "$EVIDENCE/nvidia-openshell-last-5-merges.md" \
-    >"$EVIDENCE/report.sha256"
+(
+    cd "$EVIDENCE"
+    shasum -a 256 nvidia-openshell-last-5-merges.md >report.sha256
+)
 remote 'cd "$HOME/git/openshell-lab"; tar -C evidence -cf - lab3' \
     | tar -C "$EVIDENCE" -xf -
 

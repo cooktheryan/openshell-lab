@@ -23,9 +23,10 @@ done
 openshell sandbox create \
     --name "$SANDBOX" \
     --policy "$POLICY" \
-    --upload "$ROOT/src:/sandbox" \
     --no-tty \
-    -- /bin/true >/dev/null
+    -- /usr/bin/sleep infinity >/dev/null
+
+openshell sandbox upload "$SANDBOX" "$ROOT/src" /sandbox >/dev/null
 
 openshell sandbox exec \
     --name "$SANDBOX" \

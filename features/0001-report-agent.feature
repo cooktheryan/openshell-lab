@@ -40,3 +40,12 @@ Feature: Evidence-grounded merge reporting
       Given the report fixture is "credential-bearing"
       When the report agent validates the Markdown
       Then the report validation should be "rejected"
+
+  @reliability
+  @unwanted-behavior
+  Rule: If a model tool call violates an evidence boundary before the call limit, then the report agent shall return bounded retry guidance without performing the requested operation.
+
+    Scenario: Invalid issue inspection is recoverable within the call budget
+      Given the "invalid evidence tool call" configuration is available
+      When the "tool validation recovery" is evaluated
+      Then the model should receive bounded retry guidance

@@ -140,10 +140,10 @@ def recoverable_tool_error(
     call_count: int,
     maximum: int = MAX_TOOL_CALLS,
 ) -> dict:
-    if name != "write_report" or call_count >= maximum:
+    if call_count >= maximum:
         raise error
     return {
-        "error": "write_report validation failed",
+        "error": f"{name} validation failed",
         "detail": str(error)[:500],
         "retry": True,
     }

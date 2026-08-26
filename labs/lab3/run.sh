@@ -27,16 +27,20 @@ done
 podman unshare rm -f /var/www/html/openshell-lab/nvidia-openshell-last-5-merges.md
 openshell forward stop 18080 openshell-lab3 >/dev/null 2>&1 || true
 
-openshell sandbox create \
+mkdir -p "$ROOT/evidence/lab3"
+CREATE_LOG="$ROOT/evidence/lab3/sandbox-create.log"
+if ! openshell sandbox create \
     --name "$SANDBOX" \
     --from "$IMAGE" \
     --policy "$DENY_POLICY" \
     --driver-config-json "$DRIVER_CONFIG" \
     --forward 127.0.0.1:18080 \
     --no-tty \
-    -- /bin/true >/dev/null
+    -- /usr/bin/sleep infinity > /dev/null 2>"$CREATE_LOG"; then
+    cat "$CREATE_LOG" >&2
+    exit 1
+fi
 
-mkdir -p "$ROOT/evidence/lab3"
 openshell policy get "$SANDBOX" --base --output json \
     >"$ROOT/evidence/lab3/policy-deny.json"
 if openshell sandbox exec \

@@ -31,3 +31,11 @@ http://HOST_PUBLIC_IP/openshell-lab/nvidia-openshell-last-5-merges.md
 The verifier proves that writes to `/sandbox` fail while webroot publication
 and temporary runtime scratch succeed. Only the host webroot persists after
 sandbox deletion.
+
+Sandbox-creation diagnostics are retained in
+`evidence/lab2/sandbox-create.log`. Stop this lab's loopback forward before a
+later lab reuses port 18080:
+
+```shell
+openshell forward stop 18080 openshell-lab2
+```
