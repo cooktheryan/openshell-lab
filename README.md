@@ -6,6 +6,19 @@ deny/allow policy iteration, and local Qwen inference through vLLM. The agent
 retrieves the five latest merged NVIDIA/OpenShell pull requests, inspects only
 explicitly linked issues, and publishes evidence-grounded Markdown.
 
+## Protection Layers
+
+OpenShell applies defense in depth across four policy domains:
+
+| Layer | What it protects | When it applies | Policy field |
+|---|---|---|---|
+| **Filesystem** | Prevents reads/writes outside allowed paths | Locked at sandbox creation | `filesystem_policy`, `landlock` |
+| **Process** | Blocks privilege escalation and dangerous syscalls | Locked at sandbox creation | `process` |
+| **Network** | Blocks unauthorized outbound connections | Hot-reloadable at runtime | `network_policies`, `network_middlewares` |
+| **Providers** | Grants endpoint-bound credentials and network access | Hot-reloadable at runtime | Provider profiles + `credential_binding` |
+
+See **`policies/openshell-four-layers.yaml`** for a complete policy demonstrating all four layers. See **`policies/minimal-network-only.yaml`** for a network-only policy.
+
 ## Live architecture
 
 - Labs 1–3: RHEL 10 `t3.micro` in `us-east-1`, OpenShell RPM, rootless Podman,
@@ -181,3 +194,34 @@ Stop and restart the CPU host with the guarded lifecycle scripts:
 The repository intentionally provides no termination command. The start script
 refreshes the private state file and public address. User services use lingering
 and resume automatically.
+
+## OpenShell Pilot Proposal
+
+A complete pilot proposal for presenting OpenShell to production teams is available at:
+**[OpenShell Pilot Proposal](docs/superpowers/specs/openshell-pilot-proposal.md)**
+
+The proposal covers:
+- The security risk scenario (agent searching company resources with no boundaries)
+- Why OpenShell instead of SELinux/Firewalld/containers alone
+- All four protection layers with concrete examples
+- The one-hour pilot plan on a single RHEL server
+- Specific attack scenarios and how OpenShell stops each one
+
+### Quick Pilot Start
+
+```bash
+# Install OpenShell
+curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh
+
+# Build the agent container
+podman build -t agent-policy-demo -f Containerfile .
+
+# Create sandbox and apply policy
+openshell sandbox create --name demo --from agent-policy-demo -- claude
+openshell policy set demo --policy policies/openshell-four-layers.yaml --wait
+
+# Verify each protection layer
+openshell sandbox connect demo
+```
+
+See the pilot proposal for the full plan and attack scenarios.
