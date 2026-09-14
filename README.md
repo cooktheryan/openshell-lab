@@ -1,10 +1,11 @@
-# OpenShell four-lab workshop
+# OpenShell five-lab workshop
 
-This workshop demonstrates one report agent behind OpenShell across four
-incremental controls: GitHub-only egress, persistent-write confinement,
-deny/allow policy iteration, and local Qwen inference through vLLM. The agent
-retrieves the five latest merged NVIDIA/OpenShell pull requests, inspects only
-explicitly linked issues, and publishes evidence-grounded Markdown.
+This workshop demonstrates applications behind OpenShell across five
+progressive labs: GitHub-only egress, persistent-write confinement, deny/allow
+policy iteration, local Qwen inference through vLLM, and a protected Streamlit
+UI using managed GPT-5.5 inference. The report agent retrieves the five latest
+merged NVIDIA/OpenShell pull requests, inspects only explicitly linked issues,
+and publishes evidence-grounded Markdown.
 
 ## Protection Layers
 
@@ -18,20 +19,25 @@ OpenShell applies defense in depth across four policy domains:
 | **Providers** | Grants endpoint-bound credentials and network access | Hot-reloadable at runtime | Provider profiles + `credential_binding` |
 
 See **`policies/openshell-four-layers.yaml`** for a complete policy demonstrating all four layers. See **`policies/minimal-network-only.yaml`** for a network-only policy.
+The application-focused rationale is in
+[Why OpenShell matters for AI applications](docs/openshell-why-it-matters.md).
 
 ## Live architecture
 
-- Labs 1–3: RHEL 10 `t3.micro` in `us-east-1`, OpenShell RPM, rootless Podman,
-  GPT-5.5 managed inference.
+- Labs 1–3 and 5: RHEL 10 `t3.micro` in `us-east-1`, OpenShell RPM, rootless
+  Podman, GPT-5.5 managed inference.
 - Lab 4: RHEL 10.1 `g6.12xlarge` in `us-east-2`, four NVIDIA L4 GPUs,
   unquantized `Qwen/Qwen3.6-27B` BF16, vLLM 0.19.0, tensor parallel 4, 32K
   context, and an L4-safe 16-sequence concurrency limit. The vLLM scripts also
   support the validated four-L40S profile with a 256-sequence limit.
-- Ordinary sandbox egress: read-only `api.github.com:443` by `/usr/bin/curl`.
+- Ordinary report-agent egress: read-only `api.github.com:443` by
+  `/usr/bin/curl`; Lab 5 declares no ordinary egress.
 - Model traffic: `https://inference.local/v1`, with provider credentials and
   upstream addresses held outside the agent.
 - Publication: `/var/www/html` in the sandbox, an OpenShell loopback forward,
   and Apache on port 80.
+- Streamlit: sandbox port 8501 forwarded only to CPU-host
+  `127.0.0.1:18501`, then reached through SSH.
 
 Open [the editable Excalidraw diagram](diagrams/openshell-ai-application-workflow.excalidraw)
 or [the rendered SVG](diagrams/openshell-ai-application-workflow.svg).
@@ -48,7 +54,7 @@ the dominant cost. Stop it with `./infra/aws/stop-gpu.sh` when the workshop is
 finished; do not terminate it because its EBS volume contains the driver,
 model, and compile caches.
 
-## Labs 1–3: CPU host
+## Labs 1–3 and 5: CPU host
 
 Export the OpenAI key only in the launching terminal. The deployment streams
 it over SSH standard input, configures the OpenShell provider, and unsets it.
@@ -82,6 +88,8 @@ The sequence runner is equivalent to:
 openshell forward stop 18080 openshell-lab2
 ./labs/lab3/build.sh
 ./labs/lab3/run.sh && ./labs/lab3/verify.sh
+./labs/lab5/build.sh
+./labs/lab5/run.sh && ./labs/lab5/verify.sh
 ```
 
 Lab 1 verifies the proxy-enriched baseline Landlock ruleset plus three network
@@ -90,6 +98,12 @@ remain bounded runtime paths. Lab 3 first blocks the agent with no network
 capability, hot-loads the GitHub-read-only policy, then succeeds with the same
 non-root image. Lab 2's forward is stopped before Lab 3 reuses loopback port
 18080; Lab 3 remains forwarded for evidence collection.
+
+Lab 5 reuses the Lab 1–3 `openai-gpt55` route but uses a separate
+containerized Streamlit image and `openshell-lab5` sandbox. Its request goes
+only to `inference.local`, with no credential, provider hostname, or model
+selection in the application. Ordinary egress remains empty. Its durable
+forward uses distinct host-loopback port 18501, so it does not disturb Lab 3.
 
 Evidence-boundary violations from a model tool call remain denied, but the
 agent returns sanitized retry guidance while the existing 16-call budget has
@@ -100,6 +114,7 @@ Install and use the simple home-directory runner:
 ```shell
 ./infra/remote/install-runner.sh
 ~/run-openshell-agent.sh lab3
+~/run-openshell-agent.sh lab5
 ```
 
 Discover the public report URL locally:
@@ -108,6 +123,41 @@ Discover the public report URL locally:
 source state/cpu-connection.env
 printf 'http://%s/openshell-lab/nvidia-openshell-last-5-merges.md\n' "$PUBLIC_IP"
 ```
+
+## Lab 5: protected Streamlit on the CPU host
+
+On the CPU host, build and start the application, then run the four-layer
+acceptance verifier:
+
+```shell
+cd ~/git/openshell-lab
+./labs/lab5/build.sh
+./labs/lab5/run.sh
+./labs/lab5/verify.sh
+```
+
+The verifier proves the **Filesystem**, **Network**, **Process**, and
+**Provider** boundaries independently. It checks a successful model response
+through `https://inference.local/v1/chat/completions`, a denied application-code
+write, denied `example.com` egress with a matching audit event, hardened
+process state, and absence of provider credential names from the workload.
+
+From the local repository, open an SSH tunnel to the host's loopback-only
+forward:
+
+```shell
+source state/cpu-connection.env
+ssh -N -L 8501:127.0.0.1:18501 \
+  -i "$SSH_KEY_PATH" \
+  -o StrictHostKeyChecking=yes \
+  -o "UserKnownHostsFile=$PWD/state/known_hosts" \
+  "$SSH_USER@$PUBLIC_IP"
+```
+
+Then browse to `http://127.0.0.1:8501`. Do not open port 18501 in the AWS
+security group; the remote listener is intentionally loopback-only. See the
+[Lab 5 runbook](labs/lab5/README.md) for evidence paths, expected denials,
+inspection, and cleanup.
 
 ## Lab 4: Qwen/vLLM GPU host
 
@@ -156,8 +206,8 @@ value. The sandbox continues to call only `inference.local`.
 The bootstrap resolves NVIDIA/OpenShell's current stable GitHub release, fetches
 that tag's installer, installs its checksum-verified RPM artifact, and refuses
 to continue unless `openshell --version` matches the resolved tag. The latest
-stable release verified during the 2026-08-26 review was
-[`v0.0.113`](https://github.com/NVIDIA/OpenShell/releases/tag/v0.0.113); the
+stable release verified during the 2026-09-14 CPU acceptance was
+[`v0.0.116`](https://github.com/NVIDIA/OpenShell/releases/tag/v0.0.116); the
 bootstrap resolves this dynamically rather than pinning that audit-time value.
 Its user service unit is `/usr/lib/systemd/user/openshell-gateway.service`. Operator
 configuration and gateway registration metadata persist under
@@ -194,14 +244,16 @@ rewrite the image's stored Unix modes. `read_only`, `read_write`, and
 `include_workdir` determine the paths available to the sandbox process. A host
 directory additionally requires a reviewed Podman bind mount, gateway setting
 `enable_bind_mounts = true`, and a matching in-sandbox `read_write` path. The
-Labs 2–4 mount is the worked example.
+Labs 2–4 mount is the worked example; Lab 5 needs no host bind mount.
 
 Forwarded launchers save sandbox-creation diagnostics beneath `evidence/`
 instead of leaving the background forward attached to an invoking SSH session.
 This lets non-interactive deployment return while the forward remains active.
+Lab 5 delegates its forward to `openshell-lab5-forward.service` and binds only
+`127.0.0.1:18501`.
 
 Network-policy `binaries` entries identify which executable may use a network
-capability; they do not prohibit executing that binary. OpenShell v0.0.113 has
+capability; they do not prohibit executing that binary. OpenShell v0.0.116 has
 no `denied_executables` policy field. A tool such as `dnf` is therefore made
 ineffective by denying its network destinations and keeping package-management
 paths read-only, not by naming `dnf` in an executable deny list.
@@ -215,7 +267,8 @@ export OPENAI_API_KEY='review-only-value'
 unset OPENAI_API_KEY
 ```
 
-See [troubleshooting](docs/troubleshooting.md) and the
+See [troubleshooting](docs/troubleshooting.md),
+[why OpenShell matters](docs/openshell-why-it-matters.md), and the
 [acceptance evidence index](docs/evidence-index.md). Neither script pushes a
 branch or uploads credentials.
 
@@ -232,6 +285,13 @@ Stop and restart the CPU host with the guarded lifecycle scripts:
 ```shell
 ./infra/aws/stop-cpu.sh
 ./infra/aws/start-cpu.sh
+```
+
+Before stopping the CPU host, Lab 5 can be removed independently:
+
+```shell
+systemctl --user stop openshell-lab5-forward.service
+openshell sandbox delete openshell-lab5
 ```
 
 The repository intentionally provides no termination command. The start script

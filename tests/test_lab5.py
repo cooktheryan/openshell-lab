@@ -9,6 +9,9 @@ ROOT = Path(__file__).parents[1]
 LAB = ROOT / "labs" / "lab5"
 POLICY_PATH = ROOT / "policies" / "lab5-streamlit.yaml"
 BASE_LOCK_PATH = ROOT / "container" / "base-image.lock"
+ROOT_README_PATH = ROOT / "README.md"
+LAB5_README_PATH = LAB / "README.md"
+WHY_IT_MATTERS_PATH = ROOT / "docs" / "openshell-why-it-matters.md"
 
 
 class Lab5ArtifactTests(unittest.TestCase):
@@ -123,6 +126,50 @@ class Lab5ArtifactTests(unittest.TestCase):
         ):
             self.assertIn(marker, verify)
         self.assertNotIn("openshell provider get", verify)
+
+    def test_workshop_documentation_explains_the_lab5_boundary(self):
+        documents = {
+            "root README": self.read_required(ROOT_README_PATH),
+            "Lab 5 README": self.read_required(LAB5_README_PATH),
+            "why-it-matters narrative": self.read_required(WHY_IT_MATTERS_PATH),
+        }
+        for name, text in documents.items():
+            with self.subTest(document=name):
+                self.assertIn("inference.local", text)
+                self.assertIn("openshell-lab5", text)
+                for layer in ("Filesystem", "Network", "Process", "Provider"):
+                    self.assertIn(layer, text)
+
+        tunnel = "ssh -N -L 8501:127.0.0.1:18501"
+        self.assertIn(tunnel, documents["root README"])
+        self.assertIn(tunnel, documents["Lab 5 README"])
+
+    def test_public_lab5_guidance_contains_no_obsolete_secret_or_network_path(self):
+        public_guidance = "\n".join(
+            (
+                self.read_required(ROOT_README_PATH),
+                self.read_required(LAB5_README_PATH),
+            )
+        ).lower()
+        for forbidden in (
+            "openrouter",
+            "192.168.1.101",
+            "llm_api_key",
+            "--env openai_api_key",
+            "0.0.0.0:18501",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, public_guidance)
+
+    def test_narrative_states_the_complete_provider_credential_boundary(self):
+        narrative = self.read_required(WHY_IT_MATTERS_PATH).lower()
+        self.assertIn("request omits model and credential fields", narrative)
+        self.assertIn(
+            "outside the image, environment, filesystem, and request body",
+            narrative,
+        )
+        self.assertIn("source of truth", narrative)
+        self.assertIn("openshell-lab", narrative)
 
 
 if __name__ == "__main__":
