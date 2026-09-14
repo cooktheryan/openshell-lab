@@ -54,7 +54,22 @@ remote 'cd "$HOME/git/openshell-lab"; tar -C evidence -cf - lab3' \
 
 umask 077
 lab5_transfer=$(mktemp -d "${TMPDIR:-/tmp}/openshell-lab5-evidence.XXXXXX")
-trap 'rm -rf -- "${lab5_transfer:?}"' EXIT
+lab5_stage=$(mktemp -d "$EVIDENCE/.lab5-stage.XXXXXX")
+lab5_previous="$EVIDENCE/.lab5-previous.$$"
+cleanup_lab5_transfer() {
+    rm -rf -- "${lab5_transfer:?}"
+    if [[ -n "${lab5_stage:-}" && -d "$lab5_stage" ]]; then
+        rm -rf -- "$lab5_stage"
+    fi
+    if [[ -d "$lab5_previous" ]]; then
+        if [[ ! -e "$EVIDENCE/lab5" ]]; then
+            mv "$lab5_previous" "$EVIDENCE/lab5"
+        else
+            rm -rf -- "$lab5_previous"
+        fi
+    fi
+}
+trap cleanup_lab5_transfer EXIT
 remote 'cd "$HOME/git/openshell-lab"; tar -C evidence/cpu -cf - lab5' \
     >"$lab5_transfer/lab5.tar"
 tar -tf "$lab5_transfer/lab5.tar" >"$lab5_transfer/members.txt"
@@ -72,17 +87,47 @@ if find "$lab5_transfer/extracted/lab5" -type l -print -quit | grep -q .; then
     printf 'Lab 5 evidence archive contains a symbolic link\n' >&2
     exit 1
 fi
-if ! find "$lab5_transfer/extracted/lab5" -type f -print -quit | grep -q .; then
-    printf 'Lab 5 evidence archive contains no files\n' >&2
+printf '%s\n' \
+    filesystem-denial.txt \
+    forward-unit.txt \
+    health.txt \
+    image-identity.txt \
+    listener.txt \
+    namespace-denial.txt \
+    network-denial.log \
+    policy.json \
+    probe.json \
+    process-status.txt \
+    sandbox-create.log \
+    >"$lab5_transfer/expected-lab5-files.txt"
+find "$lab5_transfer/extracted/lab5" -type f -print \
+    | sed "s|^$lab5_transfer/extracted/lab5/||" \
+    | LC_ALL=C sort >"$lab5_transfer/actual-lab5-files.txt"
+if ! cmp -s \
+    "$lab5_transfer/expected-lab5-files.txt" \
+    "$lab5_transfer/actual-lab5-files.txt"; then
+    printf 'Lab 5 evidence artifact set is incomplete or unexpected\n' >&2
     exit 1
 fi
 while IFS= read -r -d '' source; do
     relative=${source#"$lab5_transfer/extracted/lab5/"}
-    destination="$EVIDENCE/lab5/$relative"
+    destination="$lab5_stage/$relative"
     mkdir -p "$(dirname -- "$destination")"
     redact <"$source" >"$destination"
     chmod 0600 "$destination"
 done < <(find "$lab5_transfer/extracted/lab5" -type f -print0)
+
+if [[ -e "$EVIDENCE/lab5" ]]; then
+    mv "$EVIDENCE/lab5" "$lab5_previous"
+fi
+if ! mv "$lab5_stage" "$EVIDENCE/lab5"; then
+    if [[ -d "$lab5_previous" ]]; then
+        mv "$lab5_previous" "$EVIDENCE/lab5"
+    fi
+    printf 'failed to replace Lab 5 evidence atomically\n' >&2
+    exit 1
+fi
+lab5_stage=
 
 printf 'instance_id=%s\npublic_ip=%s\nreport_sha256=%s\n' \
     "$INSTANCE_ID" "$PUBLIC_IP" \

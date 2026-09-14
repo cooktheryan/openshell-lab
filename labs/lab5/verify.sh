@@ -32,28 +32,35 @@ systemctl --user is-active --quiet "$FORWARD_UNIT" || {
     printf 'Lab 5 loopback forward service is not active\n' >&2
     exit 1
 }
-curl --silent --show-error --fail --max-time 10 \
-    http://127.0.0.1:18501/_stcore/health \
-    >"$EVIDENCE_DIR/health.txt"
-test -s "$EVIDENCE_DIR/health.txt"
+FORWARD_UNIT_EVIDENCE="$EVIDENCE_DIR/forward-unit.txt"
+systemctl --user show "$FORWARD_UNIT" --property=ExecStart --value \
+    >"$FORWARD_UNIT_EVIDENCE"
+if ! grep -Fq 'openshell forward service openshell-lab5' "$FORWARD_UNIT_EVIDENCE" \
+    || ! grep -Fq -- '--target-port 8501' "$FORWARD_UNIT_EVIDENCE" \
+    || ! grep -Fq -- '--local 127.0.0.1:18501' "$FORWARD_UNIT_EVIDENCE" \
+    || grep -Eq -- '--local (0\.0\.0\.0|\[?::\]?):18501' "$FORWARD_UNIT_EVIDENCE"; then
+    printf 'Lab 5 forward unit is missing the approved mapping or contains a public bind\n' >&2
+    exit 1
+fi
 
-POLICY_EVIDENCE="$EVIDENCE_DIR/policy.json"
-openshell policy get "$SANDBOX" --full --output json >"$POLICY_EVIDENCE"
-python3 - "$POLICY_EVIDENCE" <<'PY'
-import json
+LISTENER_EVIDENCE="$EVIDENCE_DIR/listener.txt"
+ss -H -ltn 'sport = :18501' >"$LISTENER_EVIDENCE"
+python3 - "$LISTENER_EVIDENCE" <<'PY'
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as stream:
-    document = json.load(stream)
-policy = document["policy"]
-assert document["status"] == "effective"
-assert policy["landlock"]["compatibility"] == "hard_requirement"
-assert policy["network_policies"] == {}
-assert policy["process"]["run_as_user"] == "1500"
-assert policy["process"]["run_as_group"] == "1500"
-assert policy["filesystem_policy"]["read_write"] == ["/tmp", "/dev/null"]
-assert "/opt/openshell-lab" in policy["filesystem_policy"]["read_only"]
+    listeners = [line.split()[3] for line in stream if line.strip()]
+if listeners != ["127.0.0.1:18501"]:
+    raise SystemExit(f"unexpected Lab 5 listeners: {listeners!r}")
 PY
+curl --silent --show-error --fail --max-time 10 \
+    http://127.0.0.1:18501/_stcore/health \
+    >"$EVIDENCE_DIR/health.txt"
+[[ "$(<"$EVIDENCE_DIR/health.txt")" == "ok" ]]
+
+POLICY_EVIDENCE="$EVIDENCE_DIR/policy.json"
+openshell policy get "$SANDBOX" --full --output json >"$POLICY_EVIDENCE"
+PYTHONPATH="$ROOT/src" python3 -m openshell_lab.lab5_policy "$POLICY_EVIDENCE"
 
 openshell sandbox exec \
     --name "$SANDBOX" \
@@ -72,15 +79,18 @@ assert result["status"] == "ok"
 assert isinstance(result["response"], str) and result["response"].strip()
 PY
 
-if openshell sandbox exec \
+FILESYSTEM_DENIAL_EVIDENCE="$EVIDENCE_DIR/filesystem-denial.txt"
+if ! openshell sandbox exec \
     --name "$SANDBOX" \
     --no-tty \
     --timeout 15 \
-    -- /usr/bin/touch /opt/openshell-lab/lab5-write-denied \
-    >/dev/null 2>&1; then
-    printf 'Lab 5 application directory accepted a write\n' >&2
+    -- python3 -c \
+    'import errno; path = "/opt/openshell-lab/lab5-write-denied"; code = "try:\n open(path, \"w\").close()\nexcept OSError as error:\n assert error.errno in (errno.EACCES, errno.EPERM)\n print(\"filesystem-write-denied\")\nelse:\n raise RuntimeError(\"application directory accepted a write\")"; exec(code)' \
+    >"$FILESYSTEM_DENIAL_EVIDENCE"; then
+    printf 'Lab 5 filesystem denial probe failed or accepted a write\n' >&2
     exit 1
 fi
+grep -Fxq 'filesystem-write-denied' "$FILESYSTEM_DENIAL_EVIDENCE"
 
 network_status=0
 if openshell sandbox exec \
@@ -123,8 +133,10 @@ openshell sandbox exec \
     --no-tty \
     --timeout 15 \
     -- /bin/sh -c \
-    'grep -E "^(CapBnd|NoNewPrivs):" /proc/self/status' \
+    'grep -E "^(Uid|Gid|CapBnd|NoNewPrivs):" /proc/self/status' \
     >"$PROCESS_EVIDENCE"
+grep -Eq '^Uid:[[:space:]]+1500([[:space:]]+1500){3}$' "$PROCESS_EVIDENCE"
+grep -Eq '^Gid:[[:space:]]+1500([[:space:]]+1500){3}$' "$PROCESS_EVIDENCE"
 grep -Eq '^CapBnd:[[:space:]]+0+$' "$PROCESS_EVIDENCE"
 grep -Eq '^NoNewPrivs:[[:space:]]+1$' "$PROCESS_EVIDENCE"
 
@@ -133,14 +145,18 @@ openshell sandbox exec \
     --no-tty \
     --timeout 15 \
     -- /usr/bin/test -x /usr/bin/unshare >/dev/null
-if openshell sandbox exec \
+NAMESPACE_DENIAL_EVIDENCE="$EVIDENCE_DIR/namespace-denial.txt"
+if ! openshell sandbox exec \
     --name "$SANDBOX" \
     --no-tty \
     --timeout 15 \
-    -- /usr/bin/unshare -Urn true >/dev/null 2>&1; then
-    printf 'Lab 5 process created a forbidden user/network namespace\n' >&2
+    -- python3 -c \
+    'import subprocess; result = subprocess.run(["/usr/bin/unshare", "-Urn", "true"], capture_output=True, text=True); assert result.returncode == 1 and "Operation not permitted" in result.stderr; print("namespace-denied")' \
+    >"$NAMESPACE_DENIAL_EVIDENCE"; then
+    printf 'Lab 5 namespace denial probe failed or created a namespace\n' >&2
     exit 1
 fi
+grep -Fxq 'namespace-denied' "$NAMESPACE_DENIAL_EVIDENCE"
 
 if ! openshell sandbox exec \
     --name "$SANDBOX" \

@@ -61,3 +61,32 @@ Feature: Streamlit managed inference
       Given the "Lab 5 launcher" configuration is available
       When the "Lab 5 forward configuration" is evaluated
       Then the Lab 5 forward should be loopback only
+
+  @unwanted-behavior
+  Rule: If a Lab 5 security probe fails for an operational reason or the live forward is not loopback-only, then verification shall fail without accepting that condition as confinement evidence.
+
+    Scenario: Operational probe failure is rejected
+      Given the "Lab 5 verifier" configuration is available
+      When the "verifier denial controls" is evaluated
+      Then expected denials should be distinguished from operational failures
+
+    Scenario: A publicly bound live forward is rejected
+      Given the "Lab 5 verifier" configuration is available
+      When the "live listener controls" is evaluated
+      Then verification should require a live loopback listener
+
+  @event-driven
+  Rule: When a Lab 5 chat message is appended, the application shall retain no more than the newest 20 conversation messages even if managed inference fails.
+
+    Scenario: Failed inference retains bounded history
+      Given the "Lab 5 managed inference" configuration is available
+      When the "Streamlit failed inference history" is evaluated
+      Then the Streamlit conversation history should remain bounded
+
+  @event-driven
+  Rule: When Lab 5 evidence is collected, the collector shall require one complete current artifact set and replace the prior local set without retaining stale files.
+
+    Scenario: Lab 5 evidence replacement is complete
+      Given the "Lab 5 evidence collector" configuration is available
+      When the "evidence integrity controls" is evaluated
+      Then collection should reject partial or mixed evidence

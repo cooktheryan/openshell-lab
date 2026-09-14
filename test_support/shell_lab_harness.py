@@ -366,6 +366,131 @@ exit 0
         )
 
 
+def run_lab5_verifier(
+    repository: Path,
+    *,
+    filesystem_mode: str = "denied",
+    namespace_mode: str = "denied",
+    unit_bind: str = "127.0.0.1:18501",
+    listener_bind: str = "127.0.0.1:18501",
+) -> subprocess.CompletedProcess:
+    """Run the real Lab 5 verifier against fault-injectable command fakes."""
+    with tempfile.TemporaryDirectory() as directory:
+        fixture = Path(directory)
+        run_path = fixture / "labs" / "lab5" / "verify.sh"
+        run_path.parent.mkdir(parents=True)
+        shutil.copy2(repository / "labs" / "lab5" / "verify.sh", run_path)
+        module_dir = fixture / "src" / "openshell_lab"
+        module_dir.mkdir(parents=True)
+        shutil.copy2(
+            repository / "src" / "openshell_lab" / "lab5_policy.py",
+            module_dir / "lab5_policy.py",
+        )
+        (module_dir / "__init__.py").write_text("", encoding="utf-8")
+        (fixture / "state").mkdir()
+        (fixture / "state" / "lab5-image.env").write_text(
+            "IMAGE=localhost/openshell-lab-streamlit:abcdef1\n",
+            encoding="utf-8",
+        )
+
+        fake_bin = fixture / "fake-bin"
+        fake_bin.mkdir()
+        _write_executable(
+            fake_bin / "podman",
+            """#!/usr/bin/env bash
+set -euo pipefail
+printf '1500:1500\n'
+""",
+        )
+        _write_executable(
+            fake_bin / "systemctl",
+            """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$*" == *" is-active "* ]]; then
+    exit 0
+fi
+if [[ "$*" == *" show "* ]]; then
+    printf '{ path=/usr/local/bin/openshell ; argv[]=/usr/local/bin/openshell forward service openshell-lab5 --target-port 8501 --local %s ; }\n' "${UNIT_BIND:?}"
+    exit 0
+fi
+exit 2
+""",
+        )
+        _write_executable(
+            fake_bin / "ss",
+            """#!/usr/bin/env bash
+set -euo pipefail
+printf 'LISTEN 0 4096 %s 0.0.0.0:*\n' "${LISTENER_BIND:?}"
+""",
+        )
+        _write_executable(
+            fake_bin / "curl",
+            """#!/usr/bin/env bash
+set -euo pipefail
+printf 'ok'
+""",
+        )
+        _write_executable(
+            fake_bin / "openshell",
+            """#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-} ${2:-}" in
+    "policy get")
+        printf '%s\n' '{"status":"effective","policy":{"filesystem_policy":{"include_workdir":false,"read_only":["/usr","/lib64","/etc","/proc","/dev/urandom","/opt/openshell-lab"],"read_write":["/tmp","/dev/null"]},"landlock":{"compatibility":"hard_requirement"},"process":{"run_as_user":"1500","run_as_group":"1500"}}}'
+        ;;
+    "sandbox exec")
+        if [[ "$*" == *"probe.py"* ]]; then
+            printf '%s\n' '{"status":"ok","response":"managed inference works"}'
+        elif [[ "$*" == *"filesystem-write-denied"* ]]; then
+            [[ "${FILESYSTEM_MODE:?}" == denied ]] || exit 2
+            printf 'filesystem-write-denied\n'
+        elif [[ "$*" == *"example.com"* ]]; then
+            exit 1
+        elif [[ "$*" == *"/proc/self/status"* ]]; then
+            printf 'Uid:\t1500\t1500\t1500\t1500\nGid:\t1500\t1500\t1500\t1500\nCapBnd:\t0000000000000000\nNoNewPrivs:\t1\n'
+        elif [[ "$*" == *"/usr/bin/test -x /usr/bin/unshare"* ]]; then
+            exit 0
+        elif [[ "$*" == *"namespace-denied"* ]]; then
+            [[ "${NAMESPACE_MODE:?}" == denied ]] || exit 2
+            printf 'namespace-denied\n'
+        elif [[ "$*" == *"OPENAI_API_KEY"* ]]; then
+            exit 0
+        else
+            printf 'unexpected sandbox exec: %s\n' "$*" >&2
+            exit 2
+        fi
+        ;;
+    *)
+        if [[ "${1:-}" == logs ]]; then
+            printf 'NET:OPEN [MED] DENIED /usr/bin/python3.12(154) -> example.com:443\n'
+        else
+            printf 'unexpected openshell invocation: %s\n' "$*" >&2
+            exit 2
+        fi
+        ;;
+esac
+""",
+        )
+        _write_executable(fake_bin / "sleep", "#!/usr/bin/env bash\nexit 0\n")
+
+        return subprocess.run(
+            [str(run_path)],
+            cwd=fixture,
+            env={
+                **os.environ,
+                "FILESYSTEM_MODE": filesystem_mode,
+                "NAMESPACE_MODE": namespace_mode,
+                "UNIT_BIND": unit_bind,
+                "LISTENER_BIND": listener_bind,
+                "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            },
+            text=True,
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+
+
 def run_cpu_lab_sequence(sequence_script: Path) -> list[str]:
     with tempfile.TemporaryDirectory() as directory:
         fixture = Path(directory)

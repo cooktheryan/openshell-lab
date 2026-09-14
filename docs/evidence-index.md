@@ -6,8 +6,8 @@
 | Useful GPT-5.5 five-merge report | `evidence/cpu/nvidia-openshell-last-5-merges.md`, `evidence/cpu/report.sha256` |
 | GitHub-only and filesystem controls | `evidence/cpu/effective-policies.jsonl`, `evidence/cpu/sandbox-logs.txt` |
 | Lab 3 deny then allow | `evidence/cpu/lab3/policy-deny.json`, `evidence/cpu/lab3/policy-deny-probe.log`, `evidence/cpu/lab3/policy-allow.json`, `evidence/cpu/lab3/sandbox.log` |
-| Lab 5 managed inference and health (expected from remote acceptance) | `evidence/cpu/lab5/probe.json`, `evidence/cpu/lab5/health.txt` |
-| Lab 5 Filesystem, Network, Process, and Provider controls (expected from remote acceptance) | `evidence/cpu/lab5/policy.json`, `evidence/cpu/lab5/network-denial.log`, `evidence/cpu/lab5/process-status.txt`, `evidence/cpu/lab5/image-identity.txt` |
+| Lab 5 managed inference and health | `evidence/cpu/lab5/probe.json`, `evidence/cpu/lab5/health.txt` |
+| Lab 5 Filesystem, Network, Process, and Provider controls | `evidence/cpu/lab5/policy.json`, `evidence/cpu/lab5/network-denial.log`, `evidence/cpu/lab5/process-status.txt`, `evidence/cpu/lab5/image-identity.txt` |
 | Qwen tool-calling completion | `evidence/gpu/agent-result.json` records 10 tool calls |
 | Four L40S GPUs (retained acceptance evidence) | `evidence/gpu/gpus.txt` |
 | Lab 4 effective policy | `evidence/gpu/policy.json` |

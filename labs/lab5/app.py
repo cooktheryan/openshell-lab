@@ -8,6 +8,7 @@ import streamlit as st
 from openshell_lab.streamlit_inference import (
     MAX_HISTORY_MESSAGES,
     MAX_PROMPT_CHARS,
+    append_bounded_history,
     call_managed_inference,
     public_error_message,
 )
@@ -48,7 +49,10 @@ prompt = st.chat_input(
     max_chars=MAX_PROMPT_CHARS,
 )
 if prompt is not None:
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.messages = append_bounded_history(
+        st.session_state.messages,
+        {"role": "user", "content": prompt},
+    )
     with st.chat_message("user"):
         st.markdown(prompt)
 
@@ -69,11 +73,9 @@ if prompt is not None:
         )
         st.error(public_error_message(error))
     else:
-        st.session_state.messages.append(
-            {"role": "assistant", "content": response}
+        st.session_state.messages = append_bounded_history(
+            st.session_state.messages,
+            {"role": "assistant", "content": response},
         )
-        st.session_state.messages = st.session_state.messages[
-            -MAX_HISTORY_MESSAGES:
-        ]
         with st.chat_message("assistant"):
             st.markdown(response)

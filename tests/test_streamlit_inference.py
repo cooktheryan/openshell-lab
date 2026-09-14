@@ -17,6 +17,22 @@ class StreamlitInferenceTests(unittest.IsolatedAsyncioTestCase):
         )
         return streamlit_inference
 
+    def test_append_history_is_bounded_even_before_inference_completes(self):
+        client = self.require_client()
+        history = [
+            {"role": "user", "content": f"message {index}"}
+            for index in range(client.MAX_HISTORY_MESSAGES)
+        ]
+
+        bounded = client.append_bounded_history(
+            history,
+            {"role": "user", "content": "newest"},
+        )
+
+        self.assertEqual(client.MAX_HISTORY_MESSAGES, len(bounded))
+        self.assertEqual("message 1", bounded[0]["content"])
+        self.assertEqual("newest", bounded[-1]["content"])
+
     def test_request_uses_managed_route_without_model_or_credentials(self):
         client = self.require_client()
         request = client.build_chat_request(

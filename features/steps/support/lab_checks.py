@@ -360,6 +360,16 @@ class LabChecks:
             self.context.lab_state["lab5_launcher"] = path.read_text(
                 encoding="utf-8"
             )
+        elif configuration == "Lab 5 verifier":
+            path = Path(__file__).parents[3] / "labs" / "lab5" / "verify.sh"
+            self.context.lab_state["lab5_verifier"] = path.read_text(
+                encoding="utf-8"
+            )
+        elif configuration == "Lab 5 evidence collector":
+            path = Path(__file__).parents[3] / "scripts" / "collect-evidence.sh"
+            self.context.lab_state["lab5_collector"] = path.read_text(
+                encoding="utf-8"
+            )
         else:
             raise AssertionError(f"configuration not yet implemented: {configuration}")
 
@@ -600,6 +610,54 @@ class LabChecks:
                 and "--local 127.0.0.1:18501" in text
                 and "0.0.0.0:18501" not in text
             )
+        elif subject == "verifier denial controls":
+            text = self.context.lab_state["lab5_verifier"]
+            self.context.lab_state["lab5_denial_controls_valid"] = all(
+                marker in text
+                for marker in (
+                    "filesystem-write-denied",
+                    "namespace-denied",
+                    "filesystem denial probe failed",
+                    "namespace denial probe failed",
+                )
+            )
+        elif subject == "live listener controls":
+            text = self.context.lab_state["lab5_verifier"]
+            self.context.lab_state["lab5_listener_controls_valid"] = all(
+                marker in text
+                for marker in (
+                    "systemctl --user show",
+                    "ss -H -ltn",
+                    'listeners != ["127.0.0.1:18501"]',
+                )
+            )
+        elif subject == "Streamlit failed inference history":
+            from openshell_lab.streamlit_inference import (
+                MAX_HISTORY_MESSAGES,
+                append_bounded_history,
+            )
+
+            history = [
+                {"role": "user", "content": str(index)}
+                for index in range(MAX_HISTORY_MESSAGES)
+            ]
+            self.context.lab_state["streamlit_failed_history"] = (
+                append_bounded_history(
+                    history,
+                    {"role": "user", "content": "newest"},
+                )
+            )
+        elif subject == "evidence integrity controls":
+            text = self.context.lab_state["lab5_collector"]
+            self.context.lab_state["lab5_evidence_integrity_valid"] = all(
+                marker in text
+                for marker in (
+                    "expected-lab5-files.txt",
+                    "actual-lab5-files.txt",
+                    ".lab5-stage.",
+                    ".lab5-previous.",
+                )
+            )
         else:
             raise AssertionError(f"subject not yet implemented: {subject}")
 
@@ -642,6 +700,34 @@ class LabChecks:
         _require(
             self.context.lab_state["lab5_forward_valid"] is True,
             "Lab 5 forward is not durable, ordered, and loopback-only",
+        )
+
+    def assert_lab5_denials_fail_closed(self):
+        _require(
+            self.context.lab_state["lab5_denial_controls_valid"] is True,
+            "Lab 5 verifier does not distinguish denials from operational failures",
+        )
+
+    def assert_lab5_live_listener_loopback_only(self):
+        _require(
+            self.context.lab_state["lab5_listener_controls_valid"] is True,
+            "Lab 5 verifier does not require a live loopback-only listener",
+        )
+
+    def assert_streamlit_history_bounded(self):
+        from openshell_lab.streamlit_inference import MAX_HISTORY_MESSAGES
+
+        history = self.context.lab_state["streamlit_failed_history"]
+        _require(
+            len(history) == MAX_HISTORY_MESSAGES
+            and history[-1]["content"] == "newest",
+            "failed inference allowed Streamlit history to exceed its bound",
+        )
+
+    def assert_lab5_evidence_integrity(self):
+        _require(
+            self.context.lab_state["lab5_evidence_integrity_valid"] is True,
+            "Lab 5 collector can retain partial or mixed evidence",
         )
 
     def assert_nonroot_image(self):

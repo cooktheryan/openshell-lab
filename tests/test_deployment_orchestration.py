@@ -99,6 +99,16 @@ class DeploymentOrchestrationTests(unittest.TestCase):
         self.assertNotIn("openshell provider get", self.collect)
         self.assertNotIn("printenv", self.collect)
 
+    def test_lab5_evidence_requires_a_complete_set_and_replaces_stale_files(self):
+        for marker in (
+            "expected-lab5-files.txt",
+            "actual-lab5-files.txt",
+            "Lab 5 evidence artifact set is incomplete or unexpected",
+            ".lab5-stage.",
+            ".lab5-previous.",
+        ):
+            self.assertIn(marker, self.collect)
+
     def test_ocr_script_reviews_security_and_correctness(self):
         text = OCR.read_text(encoding="utf-8")
         self.assertIn("ocr scan", text)

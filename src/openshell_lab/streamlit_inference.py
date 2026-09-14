@@ -17,6 +17,13 @@ _ALLOWED_ROLES = frozenset({"system", "user", "assistant"})
 _PUBLIC_ERROR = "Managed inference is temporarily unavailable. Please try again."
 
 
+def append_bounded_history(
+    history: list[dict[str, str]], message: dict[str, str]
+) -> list[dict[str, str]]:
+    """Append one message while retaining only the newest bounded history."""
+    return [*history, message][-MAX_HISTORY_MESSAGES:]
+
+
 def build_chat_request(messages: list[dict[str, str]]) -> dict:
     """Validate chat history and build the OpenShell-managed request body."""
     if not isinstance(messages, list) or not messages:

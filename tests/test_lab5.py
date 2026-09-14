@@ -127,6 +127,20 @@ class Lab5ArtifactTests(unittest.TestCase):
             self.assertIn(marker, verify)
         self.assertNotIn("openshell provider get", verify)
 
+    def test_verifier_requires_expected_denials_and_live_loopback_evidence(self):
+        verify = self.read_required(LAB / "verify.sh")
+        for marker in (
+            "filesystem-write-denied",
+            "namespace-denied",
+            "systemctl --user show",
+            "ss -H -ltn",
+            "127.0.0.1:18501",
+            "forward-unit.txt",
+            "listener.txt",
+        ):
+            self.assertIn(marker, verify)
+        self.assertIn('[[ "$(<"$EVIDENCE_DIR/health.txt")" == "ok" ]]', verify)
+
     def test_workshop_documentation_explains_the_lab5_boundary(self):
         documents = {
             "root README": self.read_required(ROOT_README_PATH),
