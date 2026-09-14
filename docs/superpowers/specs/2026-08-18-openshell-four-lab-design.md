@@ -121,7 +121,7 @@ Tests prove successful report creation, allowed runtime scratch, and denied writ
 
 The source host directory is `/var/www/html/openshell-lab`; it is bind-mounted into the sandbox at `/var/www/html`. OpenShell therefore reasons about the stable in-sandbox path while Podman exposes only the dedicated host subtree.
 
-Host bind mounts are disabled by OpenShell by default. The lab explicitly enables Podman bind mounts in `gateway.toml` and records this security trade-off. The sandbox create request supplies the one reviewed bind mount and its SELinux shared relabel setting. No other host path is exposed.
+Host bind mounts are disabled by OpenShell by default. The lab explicitly enables Podman bind mounts in `gateway.toml` and records this security trade-off. The sandbox create request supplies the one reviewed bind mount and its SELinux private relabel setting. No other host path is exposed.
 
 The generated report is served over HTTP. Publication must work with SELinux enforcing. If direct host Apache access conflicts with the container label, Apache acts as a reverse proxy to a loopback OpenShell-forwarded static server rather than weakening SELinux globally. The validation records the public report URL and fetches it from outside the instance.
 

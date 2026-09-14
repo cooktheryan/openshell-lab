@@ -23,14 +23,19 @@ while openshell sandbox list --names | grep -Fx "$SANDBOX" >/dev/null; do
     sleep 1
 done
 
-openshell sandbox create \
+mkdir -p "$ROOT/evidence/lab2"
+CREATE_LOG="$ROOT/evidence/lab2/sandbox-create.log"
+if ! openshell sandbox create \
     --name "$SANDBOX" \
     --from "$IMAGE" \
     --policy "$POLICY" \
     --driver-config-json "$DRIVER_CONFIG" \
     --forward 127.0.0.1:18080 \
     --no-tty \
-    -- /bin/true >/dev/null
+    -- /usr/bin/sleep infinity > /dev/null 2>"$CREATE_LOG"; then
+    cat "$CREATE_LOG" >&2
+    exit 1
+fi
 
 openshell sandbox exec \
     --name "$SANDBOX" \

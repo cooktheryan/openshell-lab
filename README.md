@@ -69,9 +69,16 @@ On the host, the individual commands are:
 
 ```shell
 cd ~/git/openshell-lab
+./infra/remote/run-cpu-labs.sh
+```
+
+The sequence runner is equivalent to:
+
+```shell
 ./labs/lab1/run.sh && ./labs/lab1/verify.sh
 ./labs/lab2/configure-host.sh
 ./labs/lab2/run.sh && ./labs/lab2/verify.sh
+openshell forward stop 18080 openshell-lab2
 ./labs/lab3/build.sh
 ./labs/lab3/run.sh && ./labs/lab3/verify.sh
 ```
@@ -80,7 +87,12 @@ Lab 1 verifies the proxy-enriched baseline Landlock ruleset plus three network
 denials. Lab 2 persists only beneath `/var/www/html`; `/tmp` and `/dev/null`
 remain bounded runtime paths. Lab 3 first blocks the agent with no network
 capability, hot-loads the GitHub-read-only policy, then succeeds with the same
-non-root image.
+non-root image. Lab 2's forward is stopped before Lab 3 reuses loopback port
+18080; Lab 3 remains forwarded for evidence collection.
+
+Evidence-boundary violations from a model tool call remain denied, but the
+agent returns sanitized retry guidance while the existing 16-call budget has
+room. Reaching the limit still fails the run.
 
 Install and use the simple home-directory runner:
 
@@ -139,8 +151,8 @@ value. The sandbox continues to call only `inference.local`.
 The bootstrap resolves NVIDIA/OpenShell's current stable GitHub release, fetches
 that tag's installer, installs its checksum-verified RPM artifact, and refuses
 to continue unless `openshell --version` matches the resolved tag. The latest
-stable release verified during the 2026-08-18 review was
-[`v0.0.106`](https://github.com/NVIDIA/OpenShell/releases/tag/v0.0.106); the
+stable release verified during the 2026-08-26 review was
+[`v0.0.113`](https://github.com/NVIDIA/OpenShell/releases/tag/v0.0.113); the
 bootstrap resolves this dynamically rather than pinning that audit-time value.
 Its user service unit is `/usr/lib/systemd/user/openshell-gateway.service`. Operator
 configuration and gateway registration metadata persist under
@@ -160,8 +172,34 @@ openshell logs openshell-lab4 --source sandbox -n 200
 systemctl --user status openshell-gateway
 ```
 
-The policy files show the static controls. `lab3-network-deny.yaml` stops the
-agent entirely; `lab3-github-allow.yaml` permits only GitHub reads by curl.
+The policy files show the static controls. `lab3-network-deny.yaml` blocks
+ordinary network egress while retaining the separately routed
+`inference.local` service; `lab3-github-allow.yaml` additionally permits only
+read-only GitHub API requests made by `/usr/bin/curl`.
+
+## OpenShell container and policy model
+
+The gateway is the local control plane and must be running before a sandbox can
+be created. One gateway registers and manages multiple sandboxes. A sandbox may
+use any compatible OCI image available to the configured Podman driver; the
+image does not need to derive from an OpenShell base image.
+
+OpenShell applies filesystem policy inside the running sandbox. It does not
+rewrite the image's stored Unix modes. `read_only`, `read_write`, and
+`include_workdir` determine the paths available to the sandbox process. A host
+directory additionally requires a reviewed Podman bind mount, gateway setting
+`enable_bind_mounts = true`, and a matching in-sandbox `read_write` path. The
+Labs 2–4 mount is the worked example.
+
+Forwarded launchers save sandbox-creation diagnostics beneath `evidence/`
+instead of leaving the background forward attached to an invoking SSH session.
+This lets non-interactive deployment return while the forward remains active.
+
+Network-policy `binaries` entries identify which executable may use a network
+capability; they do not prohibit executing that binary. OpenShell v0.0.113 has
+no `denied_executables` policy field. A tool such as `dnf` is therefore made
+ineffective by denying its network destinations and keeping package-management
+paths read-only, not by naming `dnf` in an executable deny list.
 
 ## Verification and review
 

@@ -16,3 +16,8 @@
 Remote acceptance also fetched the reports through Apache from outside each
 instance. Public addresses are mutable and are deliberately kept in the
 gitignored `state/*-connection.env` files.
+
+The CPU evidence was refreshed on 2026-08-26 with OpenShell v0.0.113. The GPU
+evidence is retained from the earlier acceptance run; three guarded attempts to
+restart the existing g6e.12xlarge for a v0.0.113 refresh were rejected by EC2
+with `InsufficientInstanceCapacity`, and the instance remained stopped.

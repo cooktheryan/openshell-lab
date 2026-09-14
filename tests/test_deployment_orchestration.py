@@ -1,11 +1,14 @@
 from pathlib import Path
 import unittest
 
+from test_support.shell_lab_harness import run_cpu_lab_sequence
+
 
 ROOT = Path(__file__).parents[1]
 DEPLOY = ROOT / "scripts" / "deploy-cpu.sh"
 COLLECT = ROOT / "scripts" / "collect-evidence.sh"
 OCR = ROOT / "review" / "run-ocr.sh"
+CPU_SEQUENCE = ROOT / "infra" / "remote" / "run-cpu-labs.sh"
 
 
 class DeploymentOrchestrationTests(unittest.TestCase):
@@ -25,14 +28,24 @@ class DeploymentOrchestrationTests(unittest.TestCase):
             "rsync",
             "bootstrap-rhel10.sh",
             "configure_openai",
-            "labs/lab1/run.sh",
-            "labs/lab2/run.sh",
-            "labs/lab3/run.sh",
+            "infra/remote/run-cpu-labs.sh",
             "scan-secrets.sh",
             "collect-evidence.sh",
         ]
         positions = [self.deploy.index(marker) for marker in markers]
         self.assertEqual(sorted(positions), positions)
+
+    def test_cpu_sequence_releases_lab2_forward_before_lab3(self):
+        self.assertTrue(CPU_SEQUENCE.is_file(), f"missing {CPU_SEQUENCE}")
+        events = run_cpu_lab_sequence(CPU_SEQUENCE)
+        self.assertLess(
+            events.index("lab2-verify"),
+            events.index("forward-stop:18080:openshell-lab2"),
+        )
+        self.assertLess(
+            events.index("forward-stop:18080:openshell-lab2"),
+            events.index("lab3-build"),
+        )
 
     def test_ssh_uses_repository_known_hosts_and_strict_checking(self):
         for expected in (

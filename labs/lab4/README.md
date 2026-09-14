@@ -22,3 +22,7 @@ journalctl --user -u vllm.service -f
 The first vLLM start downloads roughly the BF16 model weight size and may take
 several minutes. The vLLM service, OpenShell sandbox, Apache report endpoint,
 and EC2 instance remain running after verification.
+
+Sandbox-creation diagnostics are retained in
+`evidence/gpu/sandbox-create.log`, independently of the SSH session that starts
+the lab.

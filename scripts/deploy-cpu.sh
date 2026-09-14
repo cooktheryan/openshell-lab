@@ -89,9 +89,7 @@ printf '%s\n' "$model_key" | _ssh_with_stdin \
     'IFS= read -r OPENAI_API_KEY; export OPENAI_API_KEY; cd "$HOME/git/openshell-lab"; ./labs/lab1/configure-openai.sh'
 unset model_key OPENAI_API_KEY
 
-_ssh 'cd "$HOME/git/openshell-lab" && ./labs/lab1/run.sh && ./labs/lab1/verify.sh'
-_ssh 'cd "$HOME/git/openshell-lab" && ./labs/lab2/configure-host.sh && ./labs/lab2/run.sh && ./labs/lab2/verify.sh'
-_ssh 'cd "$HOME/git/openshell-lab" && ./labs/lab3/build.sh && ./labs/lab3/run.sh && ./labs/lab3/verify.sh'
+_ssh 'cd "$HOME/git/openshell-lab" && ./infra/remote/run-cpu-labs.sh'
 _ssh 'cd "$HOME/git/openshell-lab" && ./scripts/scan-secrets.sh'
 "$ROOT/scripts/collect-evidence.sh"
 

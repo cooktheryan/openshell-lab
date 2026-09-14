@@ -1,7 +1,7 @@
 {
   "active_version": 2,
-  "config_revision": 9844123347061460325,
-  "hash": "da568157371d39eeb00635b418967cf22250d2680ab5397e4738c01d023ad18e",
+  "config_revision": 17766830528865896137,
+  "hash": "19374622f175415cbf084eefb148f768bf218770ecf04a469ae5dba963b3c36a",
   "policy": {
     "filesystem_policy": {
       "include_workdir": false,
