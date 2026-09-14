@@ -1,0 +1,1 @@
+{ path=/usr/bin/openshell ; argv[]=/usr/bin/openshell forward service openshell-lab5 --target-port 8501 --local 127.0.0.1:18501 ; ignore_errors=no ; start_time=[Mon 2026-09-14 20:48:20 UTC] ; stop_time=[n/a] ; pid=10760 ; code=(null) ; status=0/0 }

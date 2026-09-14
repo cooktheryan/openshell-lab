@@ -1,61 +1,61 @@
 # NVIDIA/OpenShell: Last 5 Merged Pull Requests
 ## Executive Summary
-The five most recent merged pull requests focus on deployment TLS support, certificate compatibility, CI portability, and isolation-runtime architecture. Two PRs improve TLS behavior: PR #2728 adds optional Helm BackendTLSPolicy support for Gateway API deployments, while PR #3286 updates generated gateway PKI for Python 3.13/RFC 5280 compatibility. Two PRs restore platform CI health on macOS and Windows. PR #3151 is the only selected PR explicitly tied to a larger tracked issue, advancing the Isolation Backend work under issue #1737.
+The five latest merged pull requests all landed on 2026-09-14 and were authored by drew. They form an RFC 0012 isolation stack across multiple execution drivers, followed by benchmark coverage for the resulting TCP and DNS mediation paths. Each PR is labeled `test:e2e` and explicitly states it is part of issue #1737, "feat: establish the Isolation Backend interface," which remains open and carries the labels `area:sandbox` and `rfc`. The implementation PRs move workload network access behind an authenticated supervisor/sandbox split for VM, Docker, Kubernetes, and Podman; the most recent PR adds measurement-only performance harnesses for that stack.
 
-## PR #2728: feat(helm): add BackendTLSPolicy support
-- URL: https://github.com/NVIDIA/OpenShell/pull/2728
-- Merged: 2026-09-14T17:58:47Z
-- Author: bsquizz
-- Labels: none
-- Associated issues: none identified
-### What changed
-Added optional Helm support for Gateway API BackendTLSPolicy so a Gateway proxy can terminate client-facing TLS and re-encrypt traffic to the OpenShell gateway pod while validating the backend certificate. The chart now can auto-create a backend CA ConfigMap, order cert-manager resources before certgen hooks, poll for certificate issuance, enforce a configurable timeout, and fail fast by default when BackendTLSPolicy setup is incomplete. It also adds validation to reject the invalid combination of `server.tls.enableMtls=true` with `grpcRoute.backendTLSPolicy.enabled=true`, plus documentation for troubleshooting missing backend CA/SDS TLS errors.
-### Larger task context
-No larger tracked task is evidenced by an issue, label, milestone, or explicit body relationship. The body frames this as an optional deployment path for OpenShift 4.22+ and other platforms with BackendTLSPolicy support.
-
-## PR #3286: fix(bootstrap): emit RFC 5280 extensions on generated gateway PKI
-- URL: https://github.com/NVIDIA/OpenShell/pull/3286
-- Merged: 2026-09-14T17:10:59Z
-- Author: maxdubrinsky
-- Labels: none
-- Associated issues: none identified
-### What changed
-Updated generated gateway PKI so new certificates include extensions needed for stricter Python 3.13 X.509/TLS behavior. The PR sets CA `key_usages`, enables `use_authority_key_identifier_extension` for client and server certificates, and adds tests to verify the behavior.
-### Larger task context
-No larger tracked task is evidenced by an issue, label, milestone, or explicit body relationship. The only body context is that the compatibility problem was found during a Python 3.13 upgrade in `nemo-platform`.
-
-## PR #3294: fix(ci): restore mise run ci on macOS
-- URL: https://github.com/NVIDIA/OpenShell/pull/3294
-- Merged: 2026-09-12T00:36:13Z
-- Author: krishicks
-- Labels: none
-- Associated issues: none identified
-### What changed
-Made CI-related scripts and tests more portable for macOS. The changes replace BSD-incompatible in-place `sed` usage with temp-file rewrites, remove test-only shell interception, capture generated gateway config directly, allow parity tests to use supplied supervisor binaries, normalize temporary-directory paths, use portable RPM config installation, and set a valid `setuptools-scm` version for Python protobuf generation in Jujutsu checkouts. The body reports testing with `mise run ci` on linux/amd64 in an OpenShell sandbox.
-### Larger task context
-No larger tracked task is evidenced by an issue, label, milestone, or explicit body relationship. This appears to be a localized CI portability restoration.
-
-## PR #3288: fix(ci): restore Windows test portability
-- URL: https://github.com/NVIDIA/OpenShell/pull/3288
-- Merged: 2026-09-11T21:59:50Z
-- Author: pimlock
-- Labels: test:windows
-- Associated issues: none identified
-### What changed
-Restored portability for Windows MSVC checks and native-Windows pre-commit behavior. The PR updates an OCSF device OS-name test to expect the build platform, restores a Unix-only guard on a FIFO test using `nix::unistd::mkfifo`, skips a Unix shell-based Cargo lockfile check on native Windows, and uses npm's Windows `buf.cmd` shim for `proto:lint`. The body reports native Windows pre-commit, Windows x64 tests, and Rust lint validation.
-### Larger task context
-The meaningful label `test:windows` and the body place this work in the Windows test/CI portability area. The body characterizes it as a localized correction to regressions introduced by #3015 and #2814, not as part of a larger tracked task.
-
-## PR #3151: feat(isolation): split supervisor and sandbox runtimes
-- URL: https://github.com/NVIDIA/OpenShell/pull/3151
-- Merged: 2026-09-11T21:09:25Z
+## PR #3229: perf(isolation): add TCP and DNS benchmark harnesses
+- URL: https://github.com/NVIDIA/OpenShell/pull/3229
+- Merged: 2026-09-14T20:10:17Z
 - Author: drew
 - Labels: test:e2e
 - Associated issues: #1737 (open)
 ### What changed
-Split the runtime into `openshell-supervisor`, running outside the agent workload, and `openshell-sandbox`, running inside it. The supervisor now consumes the Isolation Backend and owns policy, credentials, gateway access, DNS resolution, and upstream TCP dialing, while the sandbox owns the agent process tree, binary observation, Landlock, seccomp interception, and the OpenShell Sandbox Protocol. The gateway issues separate gateway and sandbox JWTs for a launch session; the supervisor refreshes them together, reconnects with a higher credential epoch, and fails closed if authentication expires or the channel is lost.
+This PR adds benchmark harnesses for the RFC 0012 stack. The PR body says the harnesses separately measure startup, DNS, new TCP connections, reused TCP streams, policy denial, and representative live-Internet workloads. It adds a native-versus-filtered TCP microbenchmark, measures intercepted connection setup and the established-stream fast path, adds live-Internet and end-to-end network scenarios, keeps benchmark code behind the `perf-harness` feature and outside production paths, and improves setup-failure handling by canceling prepared workers promptly when another worker fails setup. The PR describes this as measurement-only work and notes that general application UDP remains out of scope, while DNS keeps normal UDP/TCP behavior through supervisor mediation.
 ### Larger task context
-This PR is explicitly part of issue #1737, “feat: establish the Isolation Backend interface,” which is labeled `area:sandbox` and `rfc`. The PR body also presents it as item 3 in a stack of isolation-related PRs, between the Isolation Backend contract and later VM, Docker, Kubernetes proxy-pod, Podman, and performance-harness work.
+The PR body explicitly says it is "Part of #1737." Issue #1737 is titled "feat: establish the Isolation Backend interface" and is labeled `area:sandbox` and `rfc`. The PR body also includes a stack list identifying this as the performance-harness step after RFC 0012 core architecture and the VM, Docker, Kubernetes, and Podman driver work.
+
+## PR #3230: feat(podman): isolate workloads behind a separate supervisor
+- URL: https://github.com/NVIDIA/OpenShell/pull/3230
+- Merged: 2026-09-14T20:10:16Z
+- Author: drew
+- Labels: test:e2e
+- Associated issues: #1737 (open)
+### What changed
+This PR adds the Podman implementation of RFC 0012. The driver launches separate workload and supervisor containers, connects them through a private Unix socket, and denies direct workload egress. The OpenShell Sandbox Protocol uses a pinned TLS server identity and launch-scoped sandbox JWT over that socket. The implementation provisions the workload, supervisor, Unix socket, bootstrap material, and outer fence; keeps supervisor tokens, client TLS material, and proxy credentials out of the workload container; preserves template and request environment variables while protecting `OPENSHELL_*` control values; applies native OCI PID and AppArmor settings; and rotates generation and authentication material on restart.
+### Larger task context
+The PR body explicitly says it is "Part of #1737." Issue #1737 is titled "feat: establish the Isolation Backend interface" and is labeled `area:sandbox` and `rfc`. The PR body also places this Podman driver work in an RFC 0012 stack after core architecture, VM, Docker, and Kubernetes work, and before performance harnesses.
+
+## PR #3144: feat(kubernetes): isolate workloads behind a dedicated supervisor
+- URL: https://github.com/NVIDIA/OpenShell/pull/3144
+- Merged: 2026-09-14T20:10:14Z
+- Author: drew
+- Labels: test:e2e
+- Associated issues: #1737 (open)
+### What changed
+This PR adds the Kubernetes implementation of RFC 0012. The workload Pod runs `openshell-sandbox`, while a directly managed supervisor Pod runs `openshell-supervisor`. The driver denies direct workload egress and preserves supervisor egress with two shared namespace NetworkPolicies. The PR renders separate workload and supervisor Pods, gates both Pods until immutable bootstrap material and network fences are ready, denies workload-initiated egress with a namespace-wide policy, allows egress for OpenShell supervisor-role Pods with a second namespace-wide policy, splits Secrets so workloads receive only TLS server material and public JWT verification keys, gives the supervisor its gateway token, sandbox token, and pinned sandbox CA, rotates session/token/TLS/Pod/Secret state on restart, and reconciles Services, Secrets, workloads, supervisors, and shared NetworkPolicies together.
+### Larger task context
+The PR body explicitly says it is "Part of #1737." Issue #1737 is titled "feat: establish the Isolation Backend interface" and is labeled `area:sandbox` and `rfc`. The PR body also places this Kubernetes driver work in an RFC 0012 stack after core architecture, VM, and Docker work, and before Podman and performance-harness work.
+
+## PR #2965: feat(docker): isolate workloads behind a companion supervisor
+- URL: https://github.com/NVIDIA/OpenShell/pull/2965
+- Merged: 2026-09-14T20:10:13Z
+- Author: drew
+- Labels: test:e2e
+- Associated issues: #1737 (open)
+### What changed
+This PR adopts RFC 0012 in the Docker driver. The workload container runs `openshell-sandbox` with Docker networking disabled, while a companion `openshell-supervisor` container owns policy and mediated TCP/DNS access. The driver provisions a private Unix socket between containers and authenticates the OpenShell Sandbox Protocol with a pinned TLS server identity and launch-scoped sandbox JWT. The changes include launching workloads with `network_mode=none`, launching the supervisor on the Docker host network, keeping supervisor credentials/client TLS/proxy credentials out of the workload container, preserving a running workload during gateway recovery by replacing only its supervisor session, adopting missing generation markers for older running sandboxes and rejecting conflicting generations, failing closed when the supervisor or protected channel is unavailable, and preserving the accepted schema-v2 Docker configuration plus typed image-pull policy.
+### Larger task context
+The PR body explicitly says it is "Part of #1737." Issue #1737 is titled "feat: establish the Isolation Backend interface" and is labeled `area:sandbox` and `rfc`. The PR body also places this Docker driver work in an RFC 0012 stack after core architecture and VM work, and before Kubernetes, Podman, and performance-harness work.
+
+## PR #2945: feat(vm): run the supervisor outside the guest workload
+- URL: https://github.com/NVIDIA/OpenShell/pull/2945
+- Merged: 2026-09-14T20:10:11Z
+- Author: drew
+- Labels: test:e2e
+- Associated issues: #1737 (open)
+### What changed
+This PR adopts the RFC 0012 split in the VM driver. `openshell-supervisor` runs on the host, while `openshell-sandbox` runs as guest init and owns the agent process tree. The private guest channel uses the same pinned TLS server identity and launch-scoped sandbox JWT used by the other drivers, carried over vsock or the hypervisor Unix-socket mapping. The PR boots the guest with the sandbox runtime, TLS server material, and public JWT verification keys; keeps supervisor JWTs and the pinned sandbox CA on the host; runs the external host supervisor with durable runtime state; removes the guest NIC, TAP, gvproxy, nftables, and direct guest egress path; carries lifecycle, process control, TCP, and DNS over the authenticated Sandbox Protocol; and keeps gateway, provider, and upstream network access outside the guest.
+### Larger task context
+The PR body explicitly says it is "Part of #1737." Issue #1737 is titled "feat: establish the Isolation Backend interface" and is labeled `area:sandbox` and `rfc`. The PR body also places this VM driver work in an RFC 0012 stack after core architecture and before Docker, Kubernetes, Podman, and performance-harness work.
 
 ## Evidence Index
 
@@ -63,8 +63,8 @@ This index is rendered deterministically from GitHub API fields.
 
 | Pull request | PR labels | Milestone | Associated issues | Related pull requests | Workstream labels |
 |---|---|---|---|---|---|
-| [#2728](https://github.com/NVIDIA/OpenShell/pull/2728) | none | none | none | none | none |
-| [#3286](https://github.com/NVIDIA/OpenShell/pull/3286) | none | none | none | none | none |
-| [#3294](https://github.com/NVIDIA/OpenShell/pull/3294) | none | none | none | none | none |
-| [#3288](https://github.com/NVIDIA/OpenShell/pull/3288) | `test:windows` | none | none | none | none |
-| [#3151](https://github.com/NVIDIA/OpenShell/pull/3151) | `test:e2e` | none | [#1737](https://github.com/NVIDIA/OpenShell/issues/1737) (open; labels: `area:sandbox`, `rfc`) | none | none |
+| [#3229](https://github.com/NVIDIA/OpenShell/pull/3229) | `test:e2e` | none | [#1737](https://github.com/NVIDIA/OpenShell/issues/1737) (open; labels: `area:sandbox`, `rfc`) | none | none |
+| [#3230](https://github.com/NVIDIA/OpenShell/pull/3230) | `test:e2e` | none | [#1737](https://github.com/NVIDIA/OpenShell/issues/1737) (open; labels: `area:sandbox`, `rfc`) | none | none |
+| [#3144](https://github.com/NVIDIA/OpenShell/pull/3144) | `test:e2e` | none | [#1737](https://github.com/NVIDIA/OpenShell/issues/1737) (open; labels: `area:sandbox`, `rfc`) | none | none |
+| [#2965](https://github.com/NVIDIA/OpenShell/pull/2965) | `test:e2e` | none | [#1737](https://github.com/NVIDIA/OpenShell/issues/1737) (open; labels: `area:sandbox`, `rfc`) | none | none |
+| [#2945](https://github.com/NVIDIA/OpenShell/pull/2945) | `test:e2e` | none | [#1737](https://github.com/NVIDIA/OpenShell/issues/1737) (open; labels: `area:sandbox`, `rfc`) | none | none |

@@ -3,5 +3,5 @@ podman version 5.8.2
 Python 3.12.14
 Server version: Apache/2.4.63 (Red Hat Enterprise Linux)
 Enforcing
-NAME      TYPE       SIZE     USED PRIO
-/swapfile file 2147479552 81043456   -2
+NAME      TYPE       SIZE      USED PRIO
+/swapfile file 2147479552 112582656   -2
