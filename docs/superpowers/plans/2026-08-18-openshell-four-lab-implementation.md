@@ -1,5 +1,13 @@
 # OpenShell Four-Lab Demonstration Implementation Plan
 
+> **Superseded Lab 4 implementation target (2026-09-14):** The guarded
+> lifecycle now pins `i-0482b1eb41a016cc4`, a four-L4 `g6.12xlarge` in
+> `us-east-2a`. Runtime profile detection accepts only four homogeneous L4 or
+> L40S GPUs, regenerates NVIDIA CDI, and selects vLLM `--max-num-seqs 16` for
+> L4 or `256` for L40S while preserving Qwen3.6-27B BF16, tensor parallel 4,
+> and the 32,768-token context. This addendum supersedes the original
+> L40S-only Lab 4 tasks below.
+
 > Runtime reconciliation (2026-08-18): the executed RHEL 10 deployment showed
 > that proxy mode always enriches filesystem policy with an enforced Landlock
 > baseline. Labs therefore retain writable `/tmp` and `/dev/null`, Lab 1 also

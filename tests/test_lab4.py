@@ -1,6 +1,8 @@
 from pathlib import Path
 import unittest
 
+from test_support.shell_lab_harness import run_gpu_profile_detector
+
 
 ROOT = Path(__file__).parents[1]
 AWS = ROOT / "infra" / "aws"
@@ -15,11 +17,11 @@ class Lab4ArtifactTests(unittest.TestCase):
         )
         for required in (
             "us-east-2",
-            "i-000d2fc821040d9e3",
-            "g6e.12xlarge",
+            "i-0482b1eb41a016cc4",
+            "g6.12xlarge",
             "ami-0cbb38e3582830ad2",
             "single-server-shell",
-            "openshell-qwen36-single-server",
+            "openshell-qwen36-capacity-g6-2a",
             "instance-status-ok",
         ):
             self.assertIn(required, combined)
@@ -42,12 +44,50 @@ class Lab4ArtifactTests(unittest.TestCase):
             "--dtype bfloat16",
             "--tensor-parallel-size 4",
             "--max-model-len 32768",
+            "--max-num-seqs $MAX_NUM_SEQS",
             "--enable-auto-tool-choice",
             "--tool-call-parser qwen3_coder",
             "--device=nvidia.com/gpu=all",
+            "nvidia-ctk cdi generate",
             "systemctl --user",
         ):
             self.assertIn(required, text)
+        self.assertLess(
+            text.index('gpu_profile_settings=$("$LAB_DIR/detect-gpu-profile.sh")'),
+            text.index("sudo nvidia-ctk cdi generate"),
+        )
+        service_activation = text.split(
+            'sudo loginctl enable-linger "$USER"', 1
+        )[1]
+        self.assertIn('systemctl --user restart "$SERVICE"', service_activation)
+        self.assertNotIn('systemctl --user start "$SERVICE"', service_activation)
+
+    def test_gpu_profile_detector_selects_l4_concurrency(self):
+        result = run_gpu_profile_detector(
+            LAB / "detect-gpu-profile.sh", ("NVIDIA L4",) * 4
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("g6-l4 16", result.stdout.strip())
+
+    def test_gpu_profile_detector_selects_l40s_concurrency(self):
+        result = run_gpu_profile_detector(
+            LAB / "detect-gpu-profile.sh", ("NVIDIA L40S",) * 4
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("g6e-l40s 256", result.stdout.strip())
+
+    def test_gpu_profile_detector_rejects_unsupported_layouts(self):
+        for gpu_names in (
+            ("NVIDIA L4",) * 3,
+            ("NVIDIA L4", "NVIDIA L4", "NVIDIA L40S", "NVIDIA L40S"),
+            ("NVIDIA RTX PRO 6000 Blackwell Server Edition",) * 4,
+        ):
+            with self.subTest(gpu_names=gpu_names):
+                result = run_gpu_profile_detector(
+                    LAB / "detect-gpu-profile.sh", gpu_names
+                )
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("unsupported GPU topology", result.stderr)
 
     def test_openshell_uses_host_local_vllm_without_a_real_secret(self):
         text = (LAB / "configure-openshell.sh").read_text(encoding="utf-8")
@@ -61,6 +101,7 @@ class Lab4ArtifactTests(unittest.TestCase):
     def test_lab_scripts_and_manual_exist(self):
         for name in (
             "configure-vllm.sh",
+            "detect-gpu-profile.sh",
             "configure-openshell.sh",
             "run.sh",
             "verify.sh",
@@ -71,6 +112,10 @@ class Lab4ArtifactTests(unittest.TestCase):
     def test_verifier_reads_owner_only_report_through_http(self):
         text = (LAB / "verify.sh").read_text(encoding="utf-8")
         self.assertIn("published_report=$(mktemp)", text)
+        self.assertIn('"$LAB_DIR/detect-gpu-profile.sh"', text)
+        self.assertIn("nvidia-ctk cdi list", text)
+        self.assertIn('"--dtype","bfloat16"', text)
+        self.assertIn("--max-num-seqs", text)
         self.assertNotIn('grep -F \'# NVIDIA/OpenShell\' "$REPORT"', text)
 
 

@@ -1,5 +1,13 @@
 # OpenShell Four-Lab Demonstration Design
 
+> **Superseded Lab 4 infrastructure (2026-09-14):** The guarded lifecycle now
+> targets `i-0482b1eb41a016cc4`, a `g6.12xlarge` in `us-east-2a` with four
+> NVIDIA L4 GPUs. Lab 4 accepts exactly four homogeneous L4 or L40S GPUs,
+> regenerates NVIDIA CDI before vLLM starts, keeps Qwen3.6-27B BF16 at tensor
+> parallel 4 and a 32,768-token context, and sets maximum concurrent sequences
+> to 16 for L4 or 256 for L40S. This addendum supersedes the L40S-only host
+> details below; the remainder records the original workshop design.
+
 ## Purpose
 
 Build a repeatable four-lab demonstration that starts with remote OpenAI inference and GitHub-only agent egress, adds filesystem confinement, packages the application in a Podman image, and finishes with the same application using local Qwen inference through vLLM.

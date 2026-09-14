@@ -23,9 +23,10 @@ See **`policies/openshell-four-layers.yaml`** for a complete policy demonstratin
 
 - Labs 1–3: RHEL 10 `t3.micro` in `us-east-1`, OpenShell RPM, rootless Podman,
   GPT-5.5 managed inference.
-- Lab 4: RHEL 10.1 `g6e.12xlarge` in `us-east-2`, four NVIDIA L40S GPUs,
+- Lab 4: RHEL 10.1 `g6.12xlarge` in `us-east-2`, four NVIDIA L4 GPUs,
   unquantized `Qwen/Qwen3.6-27B` BF16, vLLM 0.19.0, tensor parallel 4, 32K
-  context.
+  context, and an L4-safe 16-sequence concurrency limit. The vLLM scripts also
+  support the validated four-L40S profile with a 256-sequence limit.
 - Ordinary sandbox egress: read-only `api.github.com:443` by `/usr/bin/curl`.
 - Model traffic: `https://inference.local/v1`, with provider credentials and
   upstream addresses held outside the agent.
@@ -112,6 +113,10 @@ printf 'http://%s/openshell-lab/nvidia-openshell-last-5-merges.md\n' "$PUBLIC_IP
 
 The lifecycle script refuses to mutate any host that does not match the exact
 instance type, AMI, key, security group, and owner/project/name tags.
+
+The checked-in lifecycle now targets the stopped `g6.12xlarge` capacity host in
+`us-east-2a`. The vLLM configuration regenerates NVIDIA CDI and rejects any GPU
+layout other than four homogeneous L4 or four homogeneous L40S devices.
 
 ```shell
 ./infra/aws/start-gpu.sh

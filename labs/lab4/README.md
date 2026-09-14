@@ -1,12 +1,19 @@
 # Lab 4: local Qwen through vLLM and OpenShell
 
-This lab runs unquantized `Qwen/Qwen3.6-27B` in BF16 across all four NVIDIA
-L40S GPUs on the guarded `g6e.12xlarge`. vLLM serves a 32,768-token
-OpenAI-compatible endpoint with Qwen reasoning and tool-call parsers. OpenShell
+This lab runs unquantized `Qwen/Qwen3.6-27B` in BF16 across exactly four
+homogeneous NVIDIA GPUs. The guarded host is a `g6.12xlarge` with four L4 GPUs;
+the scripts also retain the validated four-L40S `g6e.12xlarge` profile. vLLM
+serves a 32,768-token OpenAI-compatible endpoint with Qwen reasoning and
+tool-call parsers. OpenShell
 maps the injected `host.openshell.internal` endpoint to `inference.local`, so
 the application code and its credential-free model request do not change. The
 configuration script first validates the model locally, then skips gateway-side
 verification because the alias exists only at the sandbox boundary.
+
+The configuration regenerates NVIDIA CDI before starting vLLM. It limits L4
+hosts to 16 concurrent sequences to leave warm-up headroom, while L40S hosts
+use 256. Mixed GPU models, unsupported models, and any count other than four
+are rejected before the service is changed.
 
 On the GPU host, run:
 

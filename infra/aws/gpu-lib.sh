@@ -2,11 +2,11 @@
 set -euo pipefail
 
 readonly GPU_REGION="us-east-2"
-readonly GPU_INSTANCE_ID="i-000d2fc821040d9e3"
-readonly GPU_INSTANCE_TYPE="g6e.12xlarge"
+readonly GPU_INSTANCE_ID="i-0482b1eb41a016cc4"
+readonly GPU_INSTANCE_TYPE="g6.12xlarge"
 readonly GPU_AMI_ID="ami-0cbb38e3582830ad2"
 readonly GPU_PROJECT_TAG="single-server-shell"
-readonly GPU_NAME_TAG="openshell-qwen36-single-server"
+readonly GPU_NAME_TAG="openshell-qwen36-capacity-g6-2a"
 readonly GPU_OWNER_TAG="rcook"
 
 GPU_AWS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)

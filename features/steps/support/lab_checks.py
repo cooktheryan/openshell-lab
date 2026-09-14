@@ -15,6 +15,7 @@ from openshell_lab.tool_agent import (
     recoverable_tool_error,
 )
 from test_support.shell_lab_harness import (
+    run_gpu_profile_detector,
     run_cpu_lab_sequence,
     run_forwarded_launcher,
     run_secret_scan_with_failing_search,
@@ -256,6 +257,7 @@ class LabChecks:
             paths = (
                 root / "infra/aws/gpu-lib.sh",
                 root / "infra/aws/start-gpu.sh",
+                root / "labs/lab4/detect-gpu-profile.sh",
                 root / "labs/lab4/configure-vllm.sh",
                 root / "labs/lab4/configure-openshell.sh",
             )
@@ -306,6 +308,27 @@ class LabChecks:
         else:
             raise AssertionError(f"configuration not yet implemented: {configuration}")
 
+    def load_gpu_topology(self, topology):
+        topologies = {
+            "four NVIDIA L4 GPUs": ("NVIDIA L4",) * 4,
+            "four NVIDIA L40S GPUs": ("NVIDIA L40S",) * 4,
+            "three NVIDIA L4 GPUs": ("NVIDIA L4",) * 3,
+            "mixed NVIDIA GPUs": (
+                "NVIDIA L4",
+                "NVIDIA L4",
+                "NVIDIA L40S",
+                "NVIDIA L40S",
+            ),
+            "four NVIDIA RTX PRO GPUs": (
+                "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+            )
+            * 4,
+        }
+        try:
+            self.context.lab_state["gpu_names"] = topologies[topology]
+        except KeyError as error:
+            raise AssertionError(f"unknown GPU topology: {topology}") from error
+
     def evaluate_subject(self, subject):
         if subject == "model request":
             self.context.lab_state["request"] = build_chat_request(
@@ -351,16 +374,26 @@ class LabChecks:
         elif subject == "GPU inference configuration":
             text = self.context.lab_state["gpu_config"]
             required = (
-                "g6e.12xlarge",
+                "g6.12xlarge",
                 "Qwen/Qwen3.6-27B",
                 "--dtype bfloat16",
                 "--tensor-parallel-size 4",
                 "--max-model-len 32768",
-                "nvidia-smi",
-                "-eq 4",
+                "--max-num-seqs $MAX_NUM_SEQS",
+                "nvidia-ctk cdi generate",
+                "g6-l4 16",
+                "g6e-l40s 256",
             )
             self.context.lab_state["gpu_settings_valid"] = all(
                 item in text for item in required
+            )
+        elif subject == "GPU profile selection":
+            root = Path(__file__).parents[3]
+            self.context.lab_state["gpu_profile_result"] = (
+                run_gpu_profile_detector(
+                    root / "labs" / "lab4" / "detect-gpu-profile.sh",
+                    self.context.lab_state["gpu_names"],
+                )
             )
         elif subject == "OpenShell release selection":
             text = self.context.lab_state["bootstrap_config"]
@@ -528,6 +561,23 @@ class LabChecks:
 
     def assert_gpu_settings(self):
         _require(self.context.lab_state["gpu_settings_valid"] is True, "GPU settings are invalid")
+
+    def assert_gpu_sequence_limit(self, maximum_sequences):
+        result = self.context.lab_state["gpu_profile_result"]
+        _require(result.returncode == 0, result.stderr)
+        actual_limit = result.stdout.strip().split()[-1]
+        _require(
+            actual_limit == maximum_sequences,
+            f"expected maximum sequence limit {maximum_sequences}, got {actual_limit}",
+        )
+
+    def assert_gpu_profile_rejected(self):
+        result = self.context.lab_state["gpu_profile_result"]
+        _require(result.returncode != 0, "unsupported GPU topology was accepted")
+        _require(
+            "unsupported GPU topology" in result.stderr,
+            "GPU topology rejection did not explain the failure",
+        )
 
     def assert_latest_openshell_release(self):
         _require(

@@ -118,9 +118,36 @@ Feature: AWS lab deployment
       Then the secret scan should fail without reporting clean
 
   @state-driven
-  Rule: While Lab 4 is active, the GPU deployment configuration shall declare Qwen3.6-27B through four L40S GPUs with a 32768-token context limit.
+  Rule: While Lab 4 is active, the GPU deployment configuration shall run Qwen3.6-27B through exactly four homogeneous L4 or L40S GPUs with a 32768-token context limit.
 
     Scenario: GPU inference settings match the validated topology
       Given the "GPU deployment" configuration is available
       When the "GPU inference configuration" is evaluated
       Then the deployment configuration should declare the validated Qwen topology
+
+  @state-driven
+  Rule: While Lab 4 uses four homogeneous L4 or L40S GPUs, the GPU profile selector shall configure 16 maximum concurrent sequences for L4 or 256 for L40S.
+
+    Scenario Outline: GPU concurrency matches the supported topology
+      Given the GPU topology is "<topology>"
+      When the "GPU profile selection" is evaluated
+      Then the maximum concurrent sequence limit should be "<maximum_sequences>"
+
+      Examples:
+        | topology              | maximum_sequences |
+        | four NVIDIA L4 GPUs   | 16                |
+        | four NVIDIA L40S GPUs | 256               |
+
+  @unwanted-behavior
+  Rule: If Lab 4 detects a mixed, unsupported, or non-four-GPU topology, then the GPU profile selector shall reject the configuration.
+
+    Scenario Outline: Unsupported GPU topology is rejected
+      Given the GPU topology is "<topology>"
+      When the "GPU profile selection" is evaluated
+      Then the GPU profile selection should be rejected
+
+      Examples:
+        | topology                  |
+        | three NVIDIA L4 GPUs      |
+        | mixed NVIDIA GPUs         |
+        | four NVIDIA RTX PRO GPUs  |

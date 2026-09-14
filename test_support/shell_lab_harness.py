@@ -17,6 +17,34 @@ class LauncherResult:
     events: tuple[str, ...]
 
 
+def run_gpu_profile_detector(
+    detector: Path, gpu_names: tuple[str, ...]
+) -> subprocess.CompletedProcess:
+    """Run the production GPU profile detector against a fake nvidia-smi."""
+    with tempfile.TemporaryDirectory() as directory:
+        fake_bin = Path(directory) / "fake-bin"
+        fake_bin.mkdir()
+        _write_executable(
+            fake_bin / "nvidia-smi",
+            """#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == "--query-gpu=name --format=csv,noheader" ]]
+printf '%s\\n' "${GPU_NAMES:?}"
+""",
+        )
+        return subprocess.run(
+            [str(detector)],
+            text=True,
+            capture_output=True,
+            check=False,
+            env={
+                **os.environ,
+                "GPU_NAMES": "\n".join(gpu_names),
+                "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            },
+        )
+
+
 def _write_executable(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
     path.chmod(0o755)
