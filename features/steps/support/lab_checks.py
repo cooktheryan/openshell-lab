@@ -18,6 +18,7 @@ from test_support.shell_lab_harness import (
     run_gpu_profile_detector,
     run_cpu_lab_sequence,
     run_forwarded_launcher,
+    run_lab5_launcher,
     run_secret_scan_with_failing_search,
     run_secret_scan_without_rg,
 )
@@ -315,7 +316,7 @@ class LabChecks:
             root = Path(__file__).parents[3]
             self.context.lab_state["sandbox_launchers"] = {
                 lab: (root / "labs" / lab / "run.sh").read_text(encoding="utf-8")
-                for lab in ("lab1", "lab2", "lab3", "lab4")
+                for lab in ("lab1", "lab2", "lab3", "lab4", "lab5")
             }
         elif configuration == "Lab 4 launcher":
             path = Path(__file__).parents[3] / "labs" / "lab4" / "run.sh"
@@ -352,6 +353,11 @@ class LabChecks:
         elif configuration == "Streamlit image metadata":
             path = Path(__file__).parents[3] / "labs" / "lab5" / "Containerfile"
             self.context.lab_state["containerfile"] = path.read_text(
+                encoding="utf-8"
+            )
+        elif configuration == "Lab 5 launcher":
+            path = Path(__file__).parents[3] / "labs" / "lab5" / "run.sh"
+            self.context.lab_state["lab5_launcher"] = path.read_text(
                 encoding="utf-8"
             )
         else:
@@ -493,6 +499,9 @@ class LabChecks:
                 lab: run_forwarded_launcher(root, lab)
                 for lab in ("lab2", "lab3", "lab4")
             }
+            self.context.lab_state["forwarded_launcher_results"]["lab5"] = (
+                run_lab5_launcher(root)
+            )
         elif subject == "Lab 3 deny-to-allow transition":
             root = self.context.lab_state["repository_root"]
             self.context.lab_state["lab3_launcher_result"] = (
@@ -563,6 +572,25 @@ class LabChecks:
             self.context.lab_state["lab5_network_policies"] = (
                 self.context.lab_state["policy"]["network_policies"]
             )
+        elif subject == "Lab 5 forward configuration":
+            text = self.context.lab_state["lab5_launcher"]
+            create_position = text.find("openshell sandbox create")
+            streamlit_position = text.find("nohup streamlit run app.py")
+            forward_position = text.find(
+                "openshell forward service openshell-lab5"
+            )
+            host_health_position = text.find(
+                "http://127.0.0.1:18501/_stcore/health"
+            )
+            self.context.lab_state["lab5_forward_valid"] = (
+                create_position >= 0
+                and create_position < streamlit_position < forward_position
+                and forward_position < host_health_position
+                and "systemd-run --user" in text
+                and "--target-port 8501" in text
+                and "--local 127.0.0.1:18501" in text
+                and "0.0.0.0:18501" not in text
+            )
         else:
             raise AssertionError(f"subject not yet implemented: {subject}")
 
@@ -599,6 +627,12 @@ class LabChecks:
         _require(
             self.context.lab_state["lab5_network_policies"] == {},
             "Lab 5 grants ordinary network egress",
+        )
+
+    def assert_lab5_forward_loopback_only(self):
+        _require(
+            self.context.lab_state["lab5_forward_valid"] is True,
+            "Lab 5 forward is not durable, ordered, and loopback-only",
         )
 
     def assert_nonroot_image(self):
@@ -693,7 +727,14 @@ class LabChecks:
             if not result.completed
             or result.returncode != 0
             or "sandbox-created" not in result.create_log
-            or "forward-ready" not in result.create_log
+            or (
+                lab == "lab5"
+                and "forward-start" not in result.events
+            )
+            or (
+                lab != "lab5"
+                and "forward-ready" not in result.create_log
+            )
         ]
         _require(
             not failures,

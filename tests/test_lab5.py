@@ -94,6 +94,36 @@ class Lab5ArtifactTests(unittest.TestCase):
         self.assertIn("st.chat_input", app)
         self.assertIn("public_error_message", app)
 
+    def test_build_records_commit_addressed_nonroot_image(self):
+        build = self.read_required(LAB / "build.sh")
+        self.assertIn("localhost/openshell-lab-streamlit:$short_sha", build)
+        self.assertIn("state/lab5-image.env", build)
+        self.assertIn("1500:1500", build)
+        self.assertIn("labs/lab5/Containerfile", build)
+
+    def test_run_uses_durable_loopback_forward(self):
+        run = self.read_required(LAB / "run.sh")
+        self.assertIn("openshell-lab5", run)
+        self.assertIn("-- /usr/bin/sleep infinity", run)
+        self.assertIn("--target-port 8501", run)
+        self.assertIn("--local 127.0.0.1:18501", run)
+        self.assertIn("systemd-run --user", run)
+        self.assertNotIn("0.0.0.0:18501", run)
+
+    def test_verifier_covers_four_layers_and_model_probe(self):
+        verify = self.read_required(LAB / "verify.sh")
+        for marker in (
+            "probe.py",
+            "example.com",
+            "/opt/openshell-lab/lab5-write-denied",
+            "CapBnd",
+            "NoNewPrivs",
+            "OPENAI_API_KEY",
+            "policy.json",
+        ):
+            self.assertIn(marker, verify)
+        self.assertNotIn("openshell provider get", verify)
+
 
 if __name__ == "__main__":
     unittest.main()

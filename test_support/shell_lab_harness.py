@@ -216,6 +216,156 @@ esac
         )
 
 
+def run_lab5_launcher(repository: Path) -> LauncherResult:
+    """Run the real Lab 5 launcher against deterministic lifecycle fakes."""
+    source = repository / "labs" / "lab5" / "run.sh"
+    if not source.is_file():
+        return LauncherResult(
+            completed=False,
+            returncode=None,
+            stdout="",
+            stderr="Lab 5 launcher is missing",
+            create_log="",
+            events=(),
+        )
+
+    with tempfile.TemporaryDirectory() as directory:
+        fixture = Path(directory)
+        run_path = fixture / "labs" / "lab5" / "run.sh"
+        run_path.parent.mkdir(parents=True)
+        shutil.copy2(source, run_path)
+        (fixture / "policies").mkdir()
+        (fixture / "policies" / "lab5-streamlit.yaml").write_text(
+            "version: 1\nnetwork_policies: {}\n", encoding="utf-8"
+        )
+        (fixture / "state").mkdir()
+        (fixture / "state" / "lab5-image.env").write_text(
+            "IMAGE=localhost/openshell-lab-streamlit:abcdef1\n",
+            encoding="utf-8",
+        )
+
+        fake_bin = fixture / "fake-bin"
+        fake_bin.mkdir()
+        fake_state = fixture / "fake-state"
+        fake_state.mkdir()
+        _write_executable(
+            fake_bin / "podman",
+            """#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+""",
+        )
+        _write_executable(
+            fake_bin / "openshell",
+            """#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-} ${2:-}" in
+    "sandbox list")
+        exit 0
+        ;;
+    "sandbox delete")
+        printf 'sandbox-delete\n' >>"${FAKE_STATE:?}/events.log"
+        exit 0
+        ;;
+    "sandbox create")
+        printf 'sandbox-create\n' >>"${FAKE_STATE:?}/events.log"
+        printf 'sandbox-created\n' >&2
+        exit 0
+        ;;
+    "sandbox exec")
+        if [[ "$*" == *"nohup streamlit run app.py"* ]]; then
+            printf 'streamlit-start\n' >>"${FAKE_STATE:?}/events.log"
+        elif [[ "$*" == *"127.0.0.1:8501/_stcore/health"* ]]; then
+            printf 'internal-health\n' >>"${FAKE_STATE:?}/events.log"
+        else
+            printf 'unexpected sandbox exec: %s\n' "$*" >&2
+            exit 2
+        fi
+        exit 0
+        ;;
+    *)
+        printf 'unexpected openshell invocation: %s\n' "$*" >&2
+        exit 2
+        ;;
+esac
+""",
+        )
+        _write_executable(
+            fake_bin / "systemctl",
+            """#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+""",
+        )
+        _write_executable(
+            fake_bin / "systemd-run",
+            """#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == *"openshell forward service openshell-lab5"* ]]
+[[ "$*" == *"--target-port 8501"* ]]
+[[ "$*" == *"--local 127.0.0.1:18501"* ]]
+printf 'forward-start\n' >>"${FAKE_STATE:?}/events.log"
+""",
+        )
+        _write_executable(
+            fake_bin / "curl",
+            """#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == *"127.0.0.1:18501/_stcore/health"* ]]
+printf 'host-health\n' >>"${FAKE_STATE:?}/events.log"
+""",
+        )
+        _write_executable(
+            fake_bin / "sleep",
+            """#!/usr/bin/env bash
+exit 0
+""",
+        )
+
+        try:
+            process = subprocess.run(
+                [str(run_path)],
+                cwd=fixture,
+                env={
+                    **os.environ,
+                    "FAKE_STATE": str(fake_state),
+                    "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+                },
+                text=True,
+                capture_output=True,
+                timeout=2,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as error:
+            return LauncherResult(
+                completed=False,
+                returncode=None,
+                stdout=error.stdout or "",
+                stderr=error.stderr or "Lab 5 launcher timed out",
+                create_log="",
+                events=(),
+            )
+        event_log = fake_state / "events.log"
+        events = tuple(
+            event_log.read_text(encoding="utf-8").splitlines()
+            if event_log.is_file()
+            else ()
+        )
+        create_log_path = fixture / "evidence" / "cpu" / "lab5" / "sandbox-create.log"
+        return LauncherResult(
+            completed=True,
+            returncode=process.returncode,
+            stdout=process.stdout,
+            stderr=process.stderr,
+            create_log=(
+                create_log_path.read_text(encoding="utf-8")
+                if create_log_path.is_file()
+                else ""
+            ),
+            events=events,
+        )
+
+
 def run_cpu_lab_sequence(sequence_script: Path) -> list[str]:
     with tempfile.TemporaryDirectory() as directory:
         fixture = Path(directory)

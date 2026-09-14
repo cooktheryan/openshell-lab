@@ -52,3 +52,12 @@ Feature: Streamlit managed inference
       Given the "Lab 5" policy is loaded
       When the "Lab 5 network posture" is evaluated
       Then the Lab 5 ordinary network policy should be empty
+
+  @security
+  @state-driven
+  Rule: While Lab 5 is available to a browser, the Streamlit forward shall maintain a durable loopback-only mapping from host port 18501 to sandbox port 8501.
+
+    Scenario: Streamlit uses a durable loopback-only forward
+      Given the "Lab 5 launcher" configuration is available
+      When the "Lab 5 forward configuration" is evaluated
+      Then the Lab 5 forward should be loopback only

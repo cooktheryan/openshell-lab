@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
 
-from test_support.shell_lab_harness import run_forwarded_launcher
+from test_support.shell_lab_harness import run_forwarded_launcher, run_lab5_launcher
 
 
 ROOT = Path(__file__).parents[1]
@@ -21,11 +21,29 @@ class SandboxLauncherTests(unittest.TestCase):
                 self.assertIn("forward-ready", result.create_log)
 
     def test_all_labs_keep_the_canonical_process_running(self):
-        for lab in ("lab1", "lab2", "lab3", "lab4"):
+        for lab in ("lab1", "lab2", "lab3", "lab4", "lab5"):
             with self.subTest(lab=lab):
-                text = (ROOT / "labs" / lab / "run.sh").read_text(encoding="utf-8")
+                run_path = ROOT / "labs" / lab / "run.sh"
+                self.assertTrue(run_path.is_file(), f"{lab} launcher is missing")
+                text = run_path.read_text(encoding="utf-8")
                 self.assertIn("-- /usr/bin/sleep infinity", text)
                 self.assertNotIn("-- /bin/true", text)
+
+    def test_lab5_launcher_delegates_its_forward_and_releases_the_session(self):
+        result = run_lab5_launcher(ROOT)
+
+        self.assertTrue(result.completed, result.stderr)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(
+            (
+                "sandbox-create",
+                "streamlit-start",
+                "internal-health",
+                "forward-start",
+                "host-health",
+            ),
+            result.events,
+        )
 
     def test_lab4_stops_only_its_active_sandbox_forward(self):
         text = (ROOT / "labs" / "lab4" / "run.sh").read_text(encoding="utf-8")
