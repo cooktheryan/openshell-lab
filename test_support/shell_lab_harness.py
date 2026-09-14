@@ -378,6 +378,7 @@ def run_cpu_lab_sequence(sequence_script: Path) -> list[str]:
             "lab1": ("run", "verify"),
             "lab2": ("configure-host", "run", "verify"),
             "lab3": ("build", "run", "verify"),
+            "lab5": ("build", "run", "verify"),
         }.items():
             lab_dir = fixture / "labs" / lab
             lab_dir.mkdir(parents=True)

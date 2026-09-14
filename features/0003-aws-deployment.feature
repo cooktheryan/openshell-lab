@@ -151,3 +151,12 @@ Feature: AWS lab deployment
         | three NVIDIA L4 GPUs      |
         | mixed NVIDIA GPUs         |
         | four NVIDIA RTX PRO GPUs  |
+
+  @reliability
+  @event-driven
+  Rule: When Lab 3 verification completes, the CPU deployment shall execute the Lab 5 lifecycle on its distinct port 18501.
+
+    Scenario: Lab 5 follows the report labs on a distinct forward
+      Given the "CPU lab sequence" configuration is available
+      When the "CPU Lab 5 sequence" is evaluated
+      Then Lab 5 should follow Lab 3 without reusing its forward

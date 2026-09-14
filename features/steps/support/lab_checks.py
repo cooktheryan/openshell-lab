@@ -512,6 +512,15 @@ class LabChecks:
             self.context.lab_state["cpu_sequence_events"] = (
                 run_cpu_lab_sequence(path) if path.is_file() else []
             )
+        elif subject == "CPU Lab 5 sequence":
+            path = self.context.lab_state["cpu_sequence_path"]
+            root = Path(__file__).parents[3]
+            self.context.lab_state["cpu_lab5_sequence_events"] = (
+                run_cpu_lab_sequence(path) if path.is_file() else []
+            )
+            self.context.lab_state["cpu_lab5_launcher"] = (
+                root / "labs" / "lab5" / "run.sh"
+            ).read_text(encoding="utf-8")
         elif subject == "secret scanner fallback":
             secret, result = run_secret_scan_without_rg(
                 self.context.lab_state["secret_scanner_path"]
@@ -769,6 +778,22 @@ class LabChecks:
             lab2_verified < lab2_stopped < lab3_started,
             "Lab 2 forward was not stopped between Lab 2 verification and Lab 3",
         )
+
+    def assert_cpu_lab5_sequence(self):
+        events = self.context.lab_state["cpu_lab5_sequence_events"]
+        _require("lab3-verify" in events, "CPU sequence omitted Lab 3 verification")
+        _require("lab5-build" in events, "CPU sequence omitted Lab 5 build")
+        _require(
+            events.index("lab3-verify") < events.index("lab5-build"),
+            "Lab 5 started before Lab 3 verification completed",
+        )
+        _require(
+            events[-3:] == ["lab5-build", "lab5-run", "lab5-verify"],
+            "CPU sequence does not finish with the Lab 5 lifecycle",
+        )
+        launcher = self.context.lab_state["cpu_lab5_launcher"]
+        _require("18501" in launcher, "Lab 5 does not use its distinct port")
+        _require("18080" not in launcher, "Lab 5 reuses the report forward")
 
     def assert_secret_scanner_fallback(self):
         result = self.context.lab_state["scanner_result"]

@@ -16,3 +16,7 @@ openshell forward stop 18080 openshell-lab2 >/dev/null
 ./labs/lab3/build.sh
 ./labs/lab3/run.sh
 ./labs/lab3/verify.sh
+
+./labs/lab5/build.sh
+./labs/lab5/run.sh
+./labs/lab5/verify.sh

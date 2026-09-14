@@ -47,6 +47,15 @@ class DeploymentOrchestrationTests(unittest.TestCase):
             events.index("lab3-build"),
         )
 
+    def test_cpu_sequence_runs_lab5_after_lab3_verification(self):
+        events = run_cpu_lab_sequence(CPU_SEQUENCE)
+        self.assertIn("lab5-build", events)
+        self.assertLess(events.index("lab3-verify"), events.index("lab5-build"))
+        self.assertEqual(
+            ["lab5-build", "lab5-run", "lab5-verify"],
+            events[-3:],
+        )
+
     def test_ssh_uses_repository_known_hosts_and_strict_checking(self):
         for expected in (
             "state/known_hosts",
@@ -83,6 +92,12 @@ class DeploymentOrchestrationTests(unittest.TestCase):
         self.assertIn("openshell", self.collect)
         self.assertNotIn("provider get", self.collect)
         self.assertNotIn("credentials", self.collect.lower())
+
+    def test_lab5_evidence_is_archived_then_redacted_as_text(self):
+        self.assertIn("tar -C evidence/cpu -cf - lab5", self.collect)
+        self.assertIn('redact <"$source" >"$destination"', self.collect)
+        self.assertNotIn("openshell provider get", self.collect)
+        self.assertNotIn("printenv", self.collect)
 
     def test_ocr_script_reviews_security_and_correctness(self):
         text = OCR.read_text(encoding="utf-8")

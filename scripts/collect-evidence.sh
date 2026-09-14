@@ -52,6 +52,38 @@ curl --silent --show-error --fail-with-body --max-time 30 \
 remote 'cd "$HOME/git/openshell-lab"; tar -C evidence -cf - lab3' \
     | tar -C "$EVIDENCE" -xf -
 
+umask 077
+lab5_transfer=$(mktemp -d "${TMPDIR:-/tmp}/openshell-lab5-evidence.XXXXXX")
+trap 'rm -rf -- "${lab5_transfer:?}"' EXIT
+remote 'cd "$HOME/git/openshell-lab"; tar -C evidence/cpu -cf - lab5' \
+    >"$lab5_transfer/lab5.tar"
+tar -tf "$lab5_transfer/lab5.tar" >"$lab5_transfer/members.txt"
+if grep -Ev '^lab5(/|$)' "$lab5_transfer/members.txt" | grep -q .; then
+    printf 'Lab 5 evidence archive contains an out-of-scope path\n' >&2
+    exit 1
+fi
+if grep -Eq '(^|/)\.\.(/|$)|^/' "$lab5_transfer/members.txt"; then
+    printf 'Lab 5 evidence archive contains an unsafe path\n' >&2
+    exit 1
+fi
+mkdir -p "$lab5_transfer/extracted"
+tar -C "$lab5_transfer/extracted" -xf "$lab5_transfer/lab5.tar"
+if find "$lab5_transfer/extracted/lab5" -type l -print -quit | grep -q .; then
+    printf 'Lab 5 evidence archive contains a symbolic link\n' >&2
+    exit 1
+fi
+if ! find "$lab5_transfer/extracted/lab5" -type f -print -quit | grep -q .; then
+    printf 'Lab 5 evidence archive contains no files\n' >&2
+    exit 1
+fi
+while IFS= read -r -d '' source; do
+    relative=${source#"$lab5_transfer/extracted/lab5/"}
+    destination="$EVIDENCE/lab5/$relative"
+    mkdir -p "$(dirname -- "$destination")"
+    redact <"$source" >"$destination"
+    chmod 0600 "$destination"
+done < <(find "$lab5_transfer/extracted/lab5" -type f -print0)
+
 printf 'instance_id=%s\npublic_ip=%s\nreport_sha256=%s\n' \
     "$INSTANCE_ID" "$PUBLIC_IP" \
     "$(cut -d ' ' -f1 "$EVIDENCE/report.sha256")" \
