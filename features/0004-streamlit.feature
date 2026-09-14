@@ -23,3 +23,32 @@ Feature: Streamlit managed inference
         | prompt_state         |
         | empty                |
         | over 4000 characters |
+
+  @ubiquitous
+  Rule: The Lab 5 application image shall run Streamlit with the numeric non-root identity 1500:1500.
+
+    Scenario: Streamlit image declares the approved identity
+      Given the "Streamlit image metadata" configuration is available
+      When the "image identity" is evaluated
+      Then the image identity should be non-root
+
+  @state-driven
+  Rule: While Lab 5 is active, the OpenShell filesystem policy shall expose application code as read-only and confine runtime writes to /tmp and /dev/null.
+
+    Scenario: Streamlit runtime state is writable
+      Given the "Lab 5" policy is loaded
+      When the report agent writes beneath "/tmp"
+      Then the filesystem action should be "allowed"
+
+    Scenario: Streamlit application code is not writable
+      Given the "Lab 5" policy is loaded
+      When the report agent writes beneath "/opt/openshell-lab/app.py"
+      Then the filesystem action should be "denied"
+
+  @state-driven
+  Rule: While Lab 5 is active, the OpenShell network policy shall deny all ordinary egress.
+
+    Scenario: Lab 5 ordinary egress is absent
+      Given the "Lab 5" policy is loaded
+      When the "Lab 5 network posture" is evaluated
+      Then the Lab 5 ordinary network policy should be empty

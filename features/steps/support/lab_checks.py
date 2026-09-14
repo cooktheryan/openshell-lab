@@ -203,6 +203,7 @@ class LabChecks:
             "Lab 1": "lab1-github-only-baseline-filesystem.yaml",
             "GitHub-only network": "lab1-github-only-baseline-filesystem.yaml",
             "webroot-only filesystem": "lab2-webroot-only.yaml",
+            "Lab 5": "lab5-streamlit.yaml",
         }
         filename = filenames.get(policy_name)
         if filename is None:
@@ -348,6 +349,11 @@ class LabChecks:
             )
         elif configuration == "Lab 5 managed inference":
             self.context.lab_state["configuration"] = configuration
+        elif configuration == "Streamlit image metadata":
+            path = Path(__file__).parents[3] / "labs" / "lab5" / "Containerfile"
+            self.context.lab_state["containerfile"] = path.read_text(
+                encoding="utf-8"
+            )
         else:
             raise AssertionError(f"configuration not yet implemented: {configuration}")
 
@@ -553,6 +559,10 @@ class LabChecks:
                 self.context.lab_state["streamlit_input_rejected"] = True
             else:
                 self.context.lab_state["streamlit_input_rejected"] = False
+        elif subject == "Lab 5 network posture":
+            self.context.lab_state["lab5_network_policies"] = (
+                self.context.lab_state["policy"]["network_policies"]
+            )
         else:
             raise AssertionError(f"subject not yet implemented: {subject}")
 
@@ -583,6 +593,12 @@ class LabChecks:
         _require(
             self.context.lab_state["streamlit_input_rejected"] is True,
             "invalid Streamlit input reached model access",
+        )
+
+    def assert_lab5_network_policy_empty(self):
+        _require(
+            self.context.lab_state["lab5_network_policies"] == {},
+            "Lab 5 grants ordinary network egress",
         )
 
     def assert_nonroot_image(self):

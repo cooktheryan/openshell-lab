@@ -1,0 +1,28 @@
+FROM quay.io/aipcc/agentic-ci/openshell@sha256:06a978ed76d32f2341f9a36271a5ce21cf64a9a562b0eb04d0d9eb1aeb23729f
+
+USER 0
+RUN dnf install -y python3 python3-pip shadow-utils \
+    && dnf clean all \
+    && groupadd --gid 1500 openshell-streamlit \
+    && useradd --uid 1500 --gid 1500 --home-dir /tmp/streamlit-home \
+        --no-create-home --shell /sbin/nologin openshell-streamlit \
+    && mkdir -p /opt/openshell-lab/openshell_lab /tmp/streamlit-home \
+    && chown -R 1500:1500 /opt/openshell-lab /tmp/streamlit-home
+
+WORKDIR /opt/openshell-lab
+COPY --chown=1500:1500 labs/lab5/requirements.txt /opt/openshell-lab/requirements.txt
+RUN python3 -m pip install --no-cache-dir -r /opt/openshell-lab/requirements.txt
+
+COPY --chown=1500:1500 labs/lab5/app.py /opt/openshell-lab/app.py
+COPY --chown=1500:1500 labs/lab5/probe.py /opt/openshell-lab/probe.py
+COPY --chown=1500:1500 src/openshell_lab/__init__.py /opt/openshell-lab/openshell_lab/__init__.py
+COPY --chown=1500:1500 src/openshell_lab/streamlit_inference.py /opt/openshell-lab/openshell_lab/streamlit_inference.py
+
+ENV HOME=/tmp/streamlit-home \
+    PYTHONPATH=/opt/openshell-lab \
+    PYTHONDONTWRITEBYTECODE=1 \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+
+USER 1500:1500
+EXPOSE 8501
+CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
