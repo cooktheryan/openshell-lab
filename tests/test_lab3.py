@@ -50,7 +50,9 @@ class Lab3ArtifactTests(unittest.TestCase):
         self.assertLess(deny_position, allow_position)
         self.assertIn("lab3-github-allow.yaml", text)
         self.assertIn("--wait", text)
-        self.assertIn("expected denied report run", text)
+        self.assertIn("expected denied GitHub probe was blocked", text)
+        self.assertIn("--timeout 30", text)
+        self.assertIn("--max-time 20", text)
 
     def test_run_uses_reviewed_webroot_bind(self):
         text = (LAB / "run.sh").read_text(encoding="utf-8")
@@ -63,17 +65,12 @@ class Lab3ArtifactTests(unittest.TestCase):
         self.assertEqual("/var/www/html/openshell-lab", mounts[0]["source"])
         self.assertEqual("/var/www/html", mounts[0]["target"])
 
-    def test_run_stops_its_own_forward_and_clears_denied_partial_output(self):
+    def test_run_stops_its_own_forward_and_confirms_denied_report_absence(self):
         text = (LAB / "run.sh").read_text(encoding="utf-8")
         self.assertIn("openshell forward stop 18080 openshell-lab3", text)
         self.assertNotIn("openshell forward stop 18080 openshell-lab2", text)
-        self.assertGreaterEqual(
-            text.count(
-                "podman unshare rm -f /var/www/html/openshell-lab/"
-                "nvidia-openshell-last-5-merges.md"
-            ),
-            2,
-        )
+        self.assertIn('podman unshare rm -f "$REPORT_HOST_PATH"', text)
+        self.assertIn('podman unshare test -e "$REPORT_HOST_PATH"', text)
 
     def test_build_and_verify_inspect_nonroot_identity(self):
         for name in ("build.sh", "run.sh", "verify.sh"):

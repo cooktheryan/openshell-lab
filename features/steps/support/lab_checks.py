@@ -283,6 +283,8 @@ class LabChecks:
             self.context.lab_state["lab1_launcher"] = path.read_text(
                 encoding="utf-8"
             )
+        elif configuration == "Lab 3 launcher":
+            self.context.lab_state["repository_root"] = Path(__file__).parents[3]
         elif configuration == "forwarded sandbox launchers":
             self.context.lab_state["repository_root"] = Path(__file__).parents[3]
         elif configuration == "CPU lab sequence":
@@ -409,6 +411,11 @@ class LabChecks:
                 lab: run_forwarded_launcher(root, lab)
                 for lab in ("lab2", "lab3", "lab4")
             }
+        elif subject == "Lab 3 deny-to-allow transition":
+            root = self.context.lab_state["repository_root"]
+            self.context.lab_state["lab3_launcher_result"] = (
+                run_forwarded_launcher(root, "lab3")
+            )
         elif subject == "CPU forward lifecycle":
             path = self.context.lab_state["cpu_sequence_path"]
             self.context.lab_state["cpu_sequence_events"] = (
@@ -562,6 +569,23 @@ class LabChecks:
             not failures,
             "forwarded launchers retained the invoking session: "
             + ", ".join(failures),
+        )
+
+    def assert_lab3_deny_to_allow_transition(self):
+        result = self.context.lab_state["lab3_launcher_result"]
+        _require(result.completed, "Lab 3 launcher did not complete")
+        _require(result.returncode == 0, f"Lab 3 launcher failed: {result.stderr}")
+        _require(
+            result.events
+            == (
+                "denied-network-probe",
+                "denial-evidence-check",
+                "report-absence-check",
+                "policy-set",
+                "report-agent",
+            ),
+            "Lab 3 did not bound denial and preserve the required transition order: "
+            + ", ".join(result.events),
         )
 
     def assert_cpu_forward_sequence(self):

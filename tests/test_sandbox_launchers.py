@@ -47,6 +47,58 @@ class SandboxLauncherTests(unittest.TestCase):
         self.assertLess(text.index("openshell sandbox create"), text.index(upload))
         self.assertLess(text.index(upload), text.index("openshell sandbox exec"))
 
+    def test_lab3_bounds_denial_before_one_allowed_report_agent_run(self):
+        result = run_forwarded_launcher(ROOT, "lab3")
+
+        self.assertTrue(result.completed, "Lab 3 launcher did not complete")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(
+            (
+                "denied-network-probe",
+                "denial-evidence-check",
+                "report-absence-check",
+                "policy-set",
+                "report-agent",
+            ),
+            result.events,
+        )
+
+    def test_lab3_probe_operational_error_fails_before_policy_set(self):
+        result = run_forwarded_launcher(
+            ROOT,
+            "lab3",
+            lab3_probe_mode="operational-error",
+        )
+
+        self.assertTrue(result.completed, "Lab 3 launcher did not complete")
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("network-probe-error", result.events)
+        self.assertNotIn("policy-set", result.events)
+
+    def test_lab3_report_check_error_fails_before_policy_set(self):
+        result = run_forwarded_launcher(
+            ROOT,
+            "lab3",
+            lab3_report_check_status=2,
+        )
+
+        self.assertTrue(result.completed, "Lab 3 launcher did not complete")
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("report-check-error", result.events)
+        self.assertNotIn("policy-set", result.events)
+
+    def test_lab3_existing_report_fails_before_policy_set(self):
+        result = run_forwarded_launcher(
+            ROOT,
+            "lab3",
+            lab3_report_check_status=0,
+        )
+
+        self.assertTrue(result.completed, "Lab 3 launcher did not complete")
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("report-present-check", result.events)
+        self.assertNotIn("policy-set", result.events)
+
 
 if __name__ == "__main__":
     unittest.main()

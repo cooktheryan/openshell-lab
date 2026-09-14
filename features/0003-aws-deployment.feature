@@ -82,6 +82,15 @@ Feature: AWS lab deployment
       Then each invoking session should complete while its forward remains active
 
   @reliability
+  @state-driven
+  Rule: While the Lab 3 deny policy is active, the Lab 3 launcher shall use a bounded GitHub probe and confirm that no report exists before loading the allow policy and executing the report agent once.
+
+    Scenario: Lab 3 safely transitions from denied to allowed GitHub access
+      Given the "Lab 3 launcher" configuration is available
+      When the "Lab 3 deny-to-allow transition" is evaluated
+      Then the denied GitHub probe should be bounded and precede one report agent execution
+
+  @reliability
   @event-driven
   Rule: When CPU Lab 2 verification completes, the CPU deployment shall stop the Lab 2 forward before starting Lab 3.
 

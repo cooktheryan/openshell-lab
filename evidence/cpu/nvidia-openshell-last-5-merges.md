@@ -1,61 +1,61 @@
 # NVIDIA/OpenShell: Last 5 Merged Pull Requests
 ## Executive Summary
-The five latest merged NVIDIA/OpenShell pull requests are mostly maintenance and developer-experience work: one documentation/template update for agent PR review feedback, one local Kubernetes development workflow feature, two CI/contribution-workflow changes, and one Docker tracing fix. None of the selected PRs has labels, milestones, or explicitly linked issues in the PR metadata/body. Only PR #2923 provides explicit larger-task context, describing itself as a follow-up to #2851 to complete Docker OTLP behavior.
+The five most recent merged pull requests focus on deployment TLS support, certificate compatibility, CI portability, and isolation-runtime architecture. Two PRs improve TLS behavior: PR #2728 adds optional Helm BackendTLSPolicy support for Gateway API deployments, while PR #3286 updates generated gateway PKI for Python 3.13/RFC 5280 compatibility. Two PRs restore platform CI health on macOS and Windows. PR #3151 is the only selected PR explicitly tied to a larger tracked issue, advancing the Isolation Backend work under issue #1737.
 
-## PR #2910: docs(agents): clarify user-visible PR review feedback
-- URL: https://github.com/NVIDIA/OpenShell/pull/2910
-- Merged: 2026-08-26T16:40:06Z
+## PR #2728: feat(helm): add BackendTLSPolicy support
+- URL: https://github.com/NVIDIA/OpenShell/pull/2728
+- Merged: 2026-09-14T17:58:47Z
+- Author: bsquizz
+- Labels: none
+- Associated issues: none identified
+### What changed
+Added optional Helm support for Gateway API BackendTLSPolicy so a Gateway proxy can terminate client-facing TLS and re-encrypt traffic to the OpenShell gateway pod while validating the backend certificate. The chart now can auto-create a backend CA ConfigMap, order cert-manager resources before certgen hooks, poll for certificate issuance, enforce a configurable timeout, and fail fast by default when BackendTLSPolicy setup is incomplete. It also adds validation to reject the invalid combination of `server.tls.enableMtls=true` with `grpcRoute.backendTLSPolicy.enabled=true`, plus documentation for troubleshooting missing backend CA/SDS TLS errors.
+### Larger task context
+No larger tracked task is evidenced by an issue, label, milestone, or explicit body relationship. The body frames this as an optional deployment path for OpenShift 4.22+ and other platforms with BackendTLSPolicy support.
+
+## PR #3286: fix(bootstrap): emit RFC 5280 extensions on generated gateway PKI
+- URL: https://github.com/NVIDIA/OpenShell/pull/3286
+- Merged: 2026-09-14T17:10:59Z
+- Author: maxdubrinsky
+- Labels: none
+- Associated issues: none identified
+### What changed
+Updated generated gateway PKI so new certificates include extensions needed for stricter Python 3.13 X.509/TLS behavior. The PR sets CA `key_usages`, enables `use_authority_key_identifier_extension` for client and server certificates, and adds tests to verify the behavior.
+### Larger task context
+No larger tracked task is evidenced by an issue, label, milestone, or explicit body relationship. The only body context is that the compatibility problem was found during a Python 3.13 upgrade in `nemo-platform`.
+
+## PR #3294: fix(ci): restore mise run ci on macOS
+- URL: https://github.com/NVIDIA/OpenShell/pull/3294
+- Merged: 2026-09-12T00:36:13Z
 - Author: krishicks
 - Labels: none
 - Associated issues: none identified
 ### What changed
-Updated the PR review feedback template used by agents so feedback is more human-readable and grounded in user-visible behavior where appropriate. The PR body explains that the revised style compares new behavior with old behavior so PR authors can better decide whether to accept or reject feedback.
+Made CI-related scripts and tests more portable for macOS. The changes replace BSD-incompatible in-place `sed` usage with temp-file rewrites, remove test-only shell interception, capture generated gateway config directly, allow parity tests to use supplied supervisor binaries, normalize temporary-directory paths, use portable RPM config installation, and set a valid `setuptools-scm` version for Python protobuf generation in Jujutsu checkouts. The body reports testing with `mise run ci` on linux/amd64 in an OpenShell sandbox.
 ### Larger task context
-No larger task context is evidenced by linked issues, labels, milestone, or an explicit body relationship. The body leaves the Related Issue section unfilled.
+No larger tracked task is evidenced by an issue, label, milestone, or explicit body relationship. This appears to be a localized CI portability restoration.
 
-## PR #2914: feat(dev): unify local Kubernetes gateway workflow
-- URL: https://github.com/NVIDIA/OpenShell/pull/2914
-- Merged: 2026-08-26T14:54:39Z
-- Author: krishicks
-- Labels: none
+## PR #3288: fix(ci): restore Windows test portability
+- URL: https://github.com/NVIDIA/OpenShell/pull/3288
+- Merged: 2026-09-11T21:59:50Z
+- Author: pimlock
+- Labels: test:windows
 - Associated issues: none identified
 ### What changed
-Added a `helm:k3s:forward` workflow so developers do not need to run `kubectl port-forward` manually. The change also registers and selects successful plaintext Skaffold deployments with the OpenShell CLI, derives registration names from worktree-specific k3d cluster names, and updates development/debugging guidance to use the active registered gateway rather than one-off endpoint flags.
+Restored portability for Windows MSVC checks and native-Windows pre-commit behavior. The PR updates an OCSF device OS-name test to expect the build platform, restores a Unix-only guard on a FIFO test using `nix::unistd::mkfifo`, skips a Unix shell-based Cargo lockfile check on native Windows, and uses npm's Windows `buf.cmd` shim for `proto:lint`. The body reports native Windows pre-commit, Windows x64 tests, and Rust lint validation.
 ### Larger task context
-No larger task context is evidenced by linked issues, labels, milestone, or an explicit body relationship. The body leaves the Related Issue section unfilled.
+The meaningful label `test:windows` and the body place this work in the Windows test/CI portability area. The body characterizes it as a localized correction to regressions introduced by #3015 and #2814, not as part of a larger tracked task.
 
-## PR #2876: ci(branch-checks): run Rust checks in Nix shells
-- URL: https://github.com/NVIDIA/OpenShell/pull/2876
-- Merged: 2026-08-26T13:18:10Z
-- Author: SDAChess
-- Labels: none
-- Associated issues: none identified
+## PR #3151: feat(isolation): split supervisor and sandbox runtimes
+- URL: https://github.com/NVIDIA/OpenShell/pull/3151
+- Merged: 2026-09-11T21:09:25Z
+- Author: drew
+- Labels: test:e2e
+- Associated issues: #1737 (open)
 ### What changed
-Refactored Rust branch-check CI to run through the flake’s default development shell, aligning CI toolchains and native dependencies with local development. The PR runs checks across `x86_64-linux`, `aarch64-linux`, and `aarch64-darwin`; replaces the prior CI container, mise, and sccache setup with Nix and Cachix; retains `rust-cache`; and removes brittle telemetry and CA-root dependency checks.
+Split the runtime into `openshell-supervisor`, running outside the agent workload, and `openshell-sandbox`, running inside it. The supervisor now consumes the Isolation Backend and owns policy, credentials, gateway access, DNS resolution, and upstream TCP dialing, while the sandbox owns the agent process tree, binary observation, Landlock, seccomp interception, and the OpenShell Sandbox Protocol. The gateway issues separate gateway and sandbox JWTs for a launch session; the supervisor refreshes them together, reconnects with a higher credential epoch, and fails closed if authentication expires or the channel is lost.
 ### Larger task context
-The PR explicitly says no issue is required because this is a localized CI workflow refactor. No larger task context is evidenced by labels, milestone, or another explicit relationship.
-
-## PR #2929: ci(vouch): close approved request discussions
-- URL: https://github.com/NVIDIA/OpenShell/pull/2929
-- Merged: 2026-08-26T06:47:08Z
-- Author: elezar
-- Labels: none
-- Associated issues: none identified
-### What changed
-Changed the vouch-request workflow so discussions are closed after a maintainer successfully approves a contributor. It also closes still-open discussions for contributors who had already been vouched and documents automatic closure in the vouch template and contributor guide.
-### Larger task context
-The PR explicitly says no issue is required because this is localized contribution-workflow maintenance requested directly. No larger task context is evidenced by labels, milestone, or another explicit relationship.
-
-## PR #2923: fix(docker): trace standalone driver over OTLP
-- URL: https://github.com/NVIDIA/OpenShell/pull/2923
-- Merged: 2026-08-26T06:41:30Z
-- Author: elezar
-- Labels: none
-- Associated issues: none identified
-### What changed
-Added OTLP export and W3C trace-context continuation to the standalone Docker compute driver, aligning Docker’s external-driver tracing behavior with built-in mode. The PR adds `OPENSHELL_OTLP_ENDPOINT` support and graceful provider shutdown, adds bounded compute-driver RPC server spans and W3C context extraction, serves Docker through the existing `ComputeDriverService` wrapper, and documents external Docker tracing with RPC operation mapping coverage.
-### Larger task context
-This PR is explicitly described as a follow-up to #2851 that completes previously merged Docker OTLP behavior without changing the public gateway API or driver protocol. No issue, label, or milestone evidence identifies a broader tracked issue for this work.
+This PR is explicitly part of issue #1737, “feat: establish the Isolation Backend interface,” which is labeled `area:sandbox` and `rfc`. The PR body also presents it as item 3 in a stack of isolation-related PRs, between the Isolation Backend contract and later VM, Docker, Kubernetes proxy-pod, Podman, and performance-harness work.
 
 ## Evidence Index
 
@@ -63,8 +63,8 @@ This index is rendered deterministically from GitHub API fields.
 
 | Pull request | PR labels | Milestone | Associated issues | Related pull requests | Workstream labels |
 |---|---|---|---|---|---|
-| [#2910](https://github.com/NVIDIA/OpenShell/pull/2910) | none | none | none | none | none |
-| [#2914](https://github.com/NVIDIA/OpenShell/pull/2914) | none | none | none | none | none |
-| [#2876](https://github.com/NVIDIA/OpenShell/pull/2876) | none | none | none | none | none |
-| [#2929](https://github.com/NVIDIA/OpenShell/pull/2929) | none | none | none | none | none |
-| [#2923](https://github.com/NVIDIA/OpenShell/pull/2923) | none | none | none | none | none |
+| [#2728](https://github.com/NVIDIA/OpenShell/pull/2728) | none | none | none | none | none |
+| [#3286](https://github.com/NVIDIA/OpenShell/pull/3286) | none | none | none | none | none |
+| [#3294](https://github.com/NVIDIA/OpenShell/pull/3294) | none | none | none | none | none |
+| [#3288](https://github.com/NVIDIA/OpenShell/pull/3288) | `test:windows` | none | none | none | none |
+| [#3151](https://github.com/NVIDIA/OpenShell/pull/3151) | `test:e2e` | none | [#1737](https://github.com/NVIDIA/OpenShell/issues/1737) (open; labels: `area:sandbox`, `rfc`) | none | none |

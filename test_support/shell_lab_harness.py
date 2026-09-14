@@ -14,6 +14,7 @@ class LauncherResult:
     stdout: str
     stderr: str
     create_log: str
+    events: tuple[str, ...]
 
 
 def _write_executable(path: Path, content: str) -> None:
@@ -21,7 +22,13 @@ def _write_executable(path: Path, content: str) -> None:
     path.chmod(0o755)
 
 
-def run_forwarded_launcher(repository: Path, lab: str) -> LauncherResult:
+def run_forwarded_launcher(
+    repository: Path,
+    lab: str,
+    *,
+    lab3_probe_mode: str = "denied",
+    lab3_report_check_status: int = 1,
+) -> LauncherResult:
     """Run a real forwarded launcher against deterministic external fakes."""
     with tempfile.TemporaryDirectory() as directory:
         fixture = Path(directory)
@@ -46,6 +53,14 @@ def run_forwarded_launcher(repository: Path, lab: str) -> LauncherResult:
 set -euo pipefail
 if [[ "${1:-}" == image && "${2:-}" == inspect ]]; then
     printf '1500:1500\\n'
+elif [[ "${LAB_UNDER_TEST:-}" == lab3 \
+    && "${1:-} ${2:-} ${3:-}" == "unshare test -e" ]]; then
+    case "${LAB3_REPORT_CHECK_STATUS:-1}" in
+        0) printf 'report-present-check\\n' >>"${FAKE_STATE:?}/events.log" ;;
+        1) printf 'report-absence-check\\n' >>"${FAKE_STATE:?}/events.log" ;;
+        *) printf 'report-check-error\\n' >>"${FAKE_STATE:?}/events.log" ;;
+    esac
+    exit "${LAB3_REPORT_CHECK_STATUS:-1}"
 fi
 """,
         )
@@ -59,6 +74,15 @@ exit 0
             fake_bin / "openshell",
             """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == logs && "${LAB_UNDER_TEST:-}" == lab3 ]]; then
+    printf 'denial-evidence-check\\n' >>"${FAKE_STATE:?}/events.log"
+    if [[ "${LAB3_PROBE_MODE:-denied}" == operational-error ]]; then
+        printf 'sandbox log retrieval failed\\n' >&2
+        exit 2
+    fi
+    printf 'NET:OPEN [MED] DENIED /usr/bin/curl(36) -> api.github.com:443\\n'
+    exit 0
+fi
 case "${1:-} ${2:-}" in
     "sandbox list"|"sandbox delete"|"forward stop")
         exit 0
@@ -71,9 +95,28 @@ case "${1:-} ${2:-}" in
         ;;
     "sandbox exec")
         if [[ "${LAB_UNDER_TEST:-}" == lab3 \
-            && "$*" == *"python3 -m openshell_lab.cli"* \
-            && ! -f "${FAKE_STATE:?}/allowed" ]]; then
-            exit 1
+            && "$*" == *"/usr/bin/curl"* ]]; then
+            if [[ "$*" != *"--timeout 30"* || "$*" != *"--max-time 20"* ]]; then
+                printf 'unbounded-network-probe\\n' >>"${FAKE_STATE:?}/events.log"
+                exit 2
+            fi
+            if [[ "${LAB3_PROBE_MODE:-denied}" == operational-error ]]; then
+                printf 'network-probe-error\\n' >>"${FAKE_STATE:?}/events.log"
+                exit 2
+            elif [[ ! -f "${FAKE_STATE:?}/allowed" ]]; then
+                printf 'denied-network-probe\\n' >>"${FAKE_STATE:?}/events.log"
+                exit 1
+            fi
+            printf 'network-probe-after-allow\\n' >>"${FAKE_STATE:?}/events.log"
+            exit 0
+        fi
+        if [[ "${LAB_UNDER_TEST:-}" == lab3 \
+            && "$*" == *"python3 -m openshell_lab.cli"* ]]; then
+            if [[ ! -f "${FAKE_STATE:?}/allowed" ]]; then
+                printf 'report-agent-before-allow\\n' >>"${FAKE_STATE:?}/events.log"
+                exit 1
+            fi
+            printf 'report-agent\\n' >>"${FAKE_STATE:?}/events.log"
         fi
         exit 0
         ;;
@@ -81,6 +124,9 @@ case "${1:-} ${2:-}" in
         printf '{}\\n'
         ;;
     "policy set")
+        if [[ "${LAB_UNDER_TEST:-}" == lab3 ]]; then
+            printf 'policy-set\\n' >>"${FAKE_STATE:?}/events.log"
+        fi
         touch "${FAKE_STATE:?}/allowed"
         ;;
     *)
@@ -94,6 +140,8 @@ esac
             **os.environ,
             "FAKE_STATE": str(fake_state),
             "LAB_UNDER_TEST": lab,
+            "LAB3_PROBE_MODE": lab3_probe_mode,
+            "LAB3_REPORT_CHECK_STATUS": str(lab3_report_check_status),
             "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
         }
         process = subprocess.Popen(
@@ -124,12 +172,19 @@ esac
         create_log = (
             create_logs[0].read_text(encoding="utf-8") if create_logs else ""
         )
+        event_log = fake_state / "events.log"
+        events = tuple(
+            event_log.read_text(encoding="utf-8").splitlines()
+            if event_log.is_file()
+            else ()
+        )
         return LauncherResult(
             completed=completed,
             returncode=process.returncode,
             stdout=stdout,
             stderr=stderr,
             create_log=create_log,
+            events=events,
         )
 
 

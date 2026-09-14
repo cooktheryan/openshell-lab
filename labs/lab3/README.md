@@ -20,12 +20,15 @@ The CPU sequence runner performs the same handoff automatically:
 ./infra/remote/run-cpu-labs.sh
 ```
 
-The first run uses `lab3-network-deny.yaml` and must fail before gathering
-GitHub evidence. The script then replaces the dynamic network policy with
-`lab3-github-allow.yaml`, waits for activation, and reruns the same image. The
-second run must publish the report. Both policies retain the same hard-required
-webroot-only filesystem posture, so the hot update changes no static control.
+The sandbox starts with `lab3-network-deny.yaml`. A bounded direct curl probe
+must be rejected, the sandbox audit log must attribute that rejection to the
+network policy, and the launcher confirms that no report exists before it
+replaces the dynamic network policy with `lab3-github-allow.yaml`. Operational
+probe, log, and filesystem-check errors fail closed. After the allow policy
+activates, the report agent runs exactly once and must publish the report. Both
+policies retain the same hard-required webroot-only filesystem posture, so the
+hot update changes no static control.
 
-Policy snapshots, sandbox logs, and sandbox-creation diagnostics are retained
-under `evidence/lab3`. Deleting the sandbox does not delete
+Policy snapshots, denial audit events, sandbox logs, and sandbox-creation
+diagnostics are retained under `evidence/lab3`. Deleting the sandbox does not delete
 `/var/www/html/openshell-lab` on the host.
