@@ -31,6 +31,37 @@ def _require(condition, message):
         raise AssertionError(message)
 
 
+def _contains_credential_or_model(value):
+    forbidden_keys = {
+        "model",
+        "apikey",
+        "authorization",
+        "xapikey",
+        "token",
+        "accesstoken",
+        "bearertoken",
+    }
+    if isinstance(value, dict):
+        return any(
+            re.sub(r"[^a-z0-9]", "", str(key).lower()) in forbidden_keys
+            or _contains_credential_or_model(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(_contains_credential_or_model(item) for item in value)
+    if isinstance(value, str):
+        credential_patterns = (
+            r"\b(?:Bearer|Basic)\s+\S+",
+            r"sk-[A-Za-z0-9_-]{20,}",
+            r"AKIA[0-9A-Z]{16}",
+            r"gh[opusr]_[A-Za-z0-9_]{20,}",
+            r"github_pat_[A-Za-z0-9_]{20,}",
+            r"-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----",
+        )
+        return any(re.search(pattern, value, re.I) for pattern in credential_patterns)
+    return False
+
+
 class LabChecks:
     """Thin behavior adapter over production report components."""
 
@@ -133,6 +164,16 @@ class LabChecks:
         elif state != "complete":
             raise AssertionError(f"unknown report fixture: {state}")
         self.context.lab_state.update(evidence=evidence, markdown=markdown)
+
+    def load_streamlit_prompt(self, state):
+        prompts = {
+            "empty": "",
+            "over 4000 characters": "x" * 4001,
+        }
+        try:
+            self.context.lab_state["streamlit_prompt"] = prompts[state]
+        except KeyError as error:
+            raise AssertionError(f"unknown Streamlit prompt state: {state}") from error
 
     def validate_report(self):
         try:
@@ -305,6 +346,8 @@ class LabChecks:
             self.context.lab_state["secret_scanner_path"] = (
                 Path(__file__).parents[3] / "scripts" / "scan-secrets.sh"
             )
+        elif configuration == "Lab 5 managed inference":
+            self.context.lab_state["configuration"] = configuration
         else:
             raise AssertionError(f"configuration not yet implemented: {configuration}")
 
@@ -480,46 +523,67 @@ class LabChecks:
             self.context.lab_state["artifact_excluded"] = (
                 self.context.lab_state["ignore_pattern"] in ignore
             )
+        elif subject == "Streamlit model request":
+            from openshell_lab.streamlit_inference import (
+                MODEL_URL as streamlit_model_url,
+                build_chat_request as build_streamlit_chat_request,
+            )
+
+            self.context.lab_state["streamlit_request"] = (
+                build_streamlit_chat_request(
+                    [{"role": "user", "content": "hello"}]
+                )
+            )
+            self.context.lab_state["streamlit_model_url"] = streamlit_model_url
+        elif subject == "Streamlit input validation":
+            from openshell_lab.streamlit_inference import (
+                build_chat_request as build_streamlit_chat_request,
+            )
+
+            try:
+                build_streamlit_chat_request(
+                    [
+                        {
+                            "role": "user",
+                            "content": self.context.lab_state["streamlit_prompt"],
+                        }
+                    ]
+                )
+            except ValueError:
+                self.context.lab_state["streamlit_input_rejected"] = True
+            else:
+                self.context.lab_state["streamlit_input_rejected"] = False
         else:
             raise AssertionError(f"subject not yet implemented: {subject}")
 
     def assert_managed_request(self):
         request = self.context.lab_state["request"]
-        forbidden_keys = {
-            "model",
-            "apikey",
-            "authorization",
-            "xapikey",
-            "token",
-            "accesstoken",
-            "bearertoken",
-        }
-
-        def contains_credential(value):
-            if isinstance(value, dict):
-                return any(
-                    re.sub(r"[^a-z0-9]", "", str(key).lower()) in forbidden_keys
-                    or contains_credential(item)
-                    for key, item in value.items()
-                )
-            if isinstance(value, list):
-                return any(contains_credential(item) for item in value)
-            if isinstance(value, str):
-                credential_patterns = (
-                    r"\b(?:Bearer|Basic)\s+\S+",
-                    r"sk-[A-Za-z0-9_-]{20,}",
-                    r"AKIA[0-9A-Z]{16}",
-                    r"gh[opusr]_[A-Za-z0-9_]{20,}",
-                    r"github_pat_[A-Za-z0-9_]{20,}",
-                    r"-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----",
-                )
-                return any(re.search(pattern, value, re.I) for pattern in credential_patterns)
-            return False
-
         if MODEL_URL != "https://inference.local/v1/chat/completions":
             raise AssertionError(f"unexpected managed inference URL: {MODEL_URL}")
-        if contains_credential(request):
+        if _contains_credential_or_model(request):
             raise AssertionError("managed request contains a model or credential field")
+
+    def assert_streamlit_managed_request(self):
+        request = self.context.lab_state["streamlit_request"]
+        _require(
+            self.context.lab_state["streamlit_model_url"]
+            == "https://inference.local/v1/chat/completions",
+            "Streamlit request does not target managed inference",
+        )
+        _require(
+            set(request) == {"messages", "temperature", "max_completion_tokens"},
+            "Streamlit request contains fields outside the approved contract",
+        )
+        _require(
+            not _contains_credential_or_model(request),
+            "Streamlit request contains a model or credential field",
+        )
+
+    def assert_streamlit_input_rejected(self):
+        _require(
+            self.context.lab_state["streamlit_input_rejected"] is True,
+            "invalid Streamlit input reached model access",
+        )
 
     def assert_nonroot_image(self):
         identity = self.context.lab_state["image_user"].split(":", 1)
