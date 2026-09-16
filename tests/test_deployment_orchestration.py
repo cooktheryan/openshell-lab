@@ -1,7 +1,10 @@
 from pathlib import Path
 import unittest
 
-from test_support.shell_lab_harness import run_cpu_lab_sequence
+from test_support.shell_lab_harness import (
+    generated_runner_default_lab,
+    run_cpu_lab_sequence,
+)
 
 
 ROOT = Path(__file__).parents[1]
@@ -61,8 +64,7 @@ class DeploymentOrchestrationTests(unittest.TestCase):
         )
 
     def test_runner_defaults_to_lab5_when_vllm_is_active(self):
-        runner_installer = RUNNER_INSTALLER.read_text(encoding="utf-8")
-        self.assertIn("lab=lab5", runner_installer)
+        self.assertEqual("lab5", generated_runner_default_lab(RUNNER_INSTALLER))
 
     def test_ssh_uses_repository_known_hosts_and_strict_checking(self):
         for expected in (

@@ -15,6 +15,7 @@ from openshell_lab.tool_agent import (
     recoverable_tool_error,
 )
 from test_support.shell_lab_harness import (
+    generated_runner_default_lab,
     run_gpu_profile_detector,
     run_cpu_lab_sequence,
     run_forwarded_launcher,
@@ -339,7 +340,7 @@ class LabChecks:
         elif configuration == "home runner installer":
             self.context.lab_state["home_runner_installer"] = (
                 Path(__file__).parents[3] / "infra" / "remote" / "install-runner.sh"
-            ).read_text(encoding="utf-8")
+            )
         elif configuration == "secret scanner without ripgrep":
             self.context.lab_state["secret_scanner_path"] = (
                 Path(__file__).parents[3] / "scripts" / "scan-secrets.sh"
@@ -537,7 +538,10 @@ class LabChecks:
             ).read_text(encoding="utf-8")
         elif subject == "GPU default lab":
             self.context.lab_state["generated_runner_default_lab5"] = (
-                "lab=lab5" in self.context.lab_state["home_runner_installer"]
+                generated_runner_default_lab(
+                    self.context.lab_state["home_runner_installer"]
+                )
+                == "lab5"
             )
         elif subject == "secret scanner fallback":
             secret, result = run_secret_scan_without_rg(

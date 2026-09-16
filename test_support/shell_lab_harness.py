@@ -503,7 +503,7 @@ def run_cpu_lab_sequence(sequence_script: Path) -> list[str]:
             "lab1": ("run", "verify"),
             "lab2": ("configure-host", "run", "verify"),
             "lab3": ("build", "run", "verify"),
-            "lab5": ("build", "run", "verify"),
+            "lab4": ("build", "run", "verify"),
         }.items():
             lab_dir = fixture / "labs" / lab
             lab_dir.mkdir(parents=True)
@@ -536,6 +536,57 @@ printf 'forward-stop:%s:%s\\n' "${3:-}" "${4:-}" >>"${EVENT_LOG:?}"
             check=True,
         )
         return event_log.read_text(encoding="utf-8").splitlines()
+
+
+def generated_runner_default_lab(installer: Path) -> str:
+    """Run the installer with active vLLM and return the generated default."""
+    with tempfile.TemporaryDirectory() as directory:
+        home = Path(directory) / "home"
+        lab_root = home / "git" / "openshell-lab" / "labs"
+        for lab in ("lab1", "lab2", "lab3", "lab4", "lab5"):
+            runner = lab_root / lab / "run.sh"
+            runner.parent.mkdir(parents=True)
+            _write_executable(
+                runner,
+                "#!/usr/bin/env bash\n"
+                f"printf '{lab}\\n' >\"${{RUNNER_EVENT:?}}\"\n",
+            )
+
+        fake_bin = Path(directory) / "fake-bin"
+        fake_bin.mkdir()
+        _write_executable(
+            fake_bin / "systemctl",
+            "#!/usr/bin/env bash\n"
+            '[[ "$*" == "--user is-active --quiet vllm.service" ]]\n',
+        )
+        event_log = Path(directory) / "runner-event.log"
+        subprocess.run(
+            [str(installer)],
+            env={
+                **os.environ,
+                "HOME": str(home),
+                "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            },
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        runner = (home / "run-openshell-agent.sh").read_text(encoding="utf-8")
+        if not runner:
+            raise AssertionError("installer generated an empty runner")
+        subprocess.run(
+            [str(home / "run-openshell-agent.sh")],
+            env={
+                **os.environ,
+                "HOME": str(home),
+                "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+                "RUNNER_EVENT": str(event_log),
+            },
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        return event_log.read_text(encoding="utf-8").strip()
 
 
 def restricted_search_path() -> str:

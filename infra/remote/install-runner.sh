@@ -18,7 +18,7 @@ printf '%s\n' \
     'lab=${1:-}' \
     'if [[ -z "$lab" ]]; then' \
     '    if systemctl --user is-active --quiet vllm.service 2>/dev/null; then' \
-    '        lab=lab4' \
+    '        lab=lab5' \
     '    else' \
     '        lab=lab3' \
     '    fi' \
