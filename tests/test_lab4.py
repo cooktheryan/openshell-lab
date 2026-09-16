@@ -11,6 +11,7 @@ POLICY_PATH = ROOT / "policies" / "lab4-streamlit.yaml"
 BASE_LOCK_PATH = ROOT / "container" / "base-image.lock"
 ROOT_README_PATH = ROOT / "README.md"
 LAB4_README_PATH = LAB / "README.md"
+LAB5_README_PATH = ROOT / "labs" / "lab5" / "README.md"
 WHY_IT_MATTERS_PATH = ROOT / "docs" / "openshell-why-it-matters.md"
 
 
@@ -169,6 +170,21 @@ class Lab4ArtifactTests(unittest.TestCase):
         self.assertNotIn("Labs 1–3 and 5", root_readme)
         self.assertNotIn("openshell-lab5-forward.service", streamlit_runbook)
         self.assertIn("openshell-lab4-forward.service", streamlit_runbook)
+
+    def test_gpu_run_sequences_do_not_follow_vllm_logs_inline(self):
+        monitor_heading = "## Optional vLLM monitoring (second terminal)"
+        documents = {
+            "root README": self.read_required(ROOT_README_PATH),
+            "Lab 5 README": self.read_required(LAB5_README_PATH),
+        }
+
+        for name, text in documents.items():
+            with self.subTest(document=name):
+                self.assertIn(monitor_heading, text)
+                primary_guidance = text.split(monitor_heading, 1)[0]
+                self.assertNotIn(
+                    "journalctl --user -u vllm.service -f", primary_guidance
+                )
 
     def test_public_lab4_guidance_contains_no_obsolete_secret_or_network_path(self):
         public_guidance = "\n".join(

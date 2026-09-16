@@ -180,19 +180,30 @@ ssh -i "$SSH_KEY_PATH" "$SSH_USER@$PUBLIC_IP"
 ```
 
 Upload this repository with the same exclusions used by `deploy-cpu.sh`, then
-run on the GPU host:
+run the following primary sequence on the GPU host:
 
 ```shell
 cd ~/git/openshell-lab
 ./infra/remote/bootstrap-rhel10.sh
 ./labs/lab2/configure-host.sh
 ./labs/lab5/configure-vllm.sh
-journalctl --user -u vllm.service -f
 ./labs/lab5/configure-openshell.sh
 ./labs/lab5/run.sh
 ./labs/lab5/verify.sh
 ./infra/remote/install-runner.sh
 ```
+
+## Optional vLLM monitoring (second terminal)
+
+While the primary sequence continues in its first terminal, use a second
+terminal to follow vLLM startup logs:
+
+```shell
+journalctl --user -u vllm.service -f
+```
+
+This command follows logs until you stop it with `Ctrl-C`; stopping the monitor
+does not stop `vllm.service`.
 
 The vLLM readiness check is:
 
