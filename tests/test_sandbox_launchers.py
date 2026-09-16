@@ -29,7 +29,12 @@ class SandboxLauncherTests(unittest.TestCase):
                 self.assertIn("-- /usr/bin/sleep infinity", text)
                 self.assertNotIn("-- /bin/true", text)
 
-    def test_lab5_launcher_delegates_its_forward_and_releases_the_session(self):
+    def test_lab4_launcher_delegates_its_forward_and_releases_the_session(self):
+        streamlit_run = (ROOT / "labs" / "lab4" / "run.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("--local 127.0.0.1:18401", streamlit_run)
+        self.assertIn('SANDBOX="openshell-lab4"', streamlit_run)
         result = run_lab5_launcher(ROOT)
 
         self.assertTrue(result.completed, result.stderr)
@@ -45,10 +50,12 @@ class SandboxLauncherTests(unittest.TestCase):
             result.events,
         )
 
-    def test_lab4_stops_only_its_active_sandbox_forward(self):
-        text = (ROOT / "labs" / "lab4" / "run.sh").read_text(encoding="utf-8")
-        self.assertIn('openshell forward stop 18080 "$SANDBOX"', text)
-        self.assertNotIn("openshell forward stop 18080 openshell-lab3", text)
+    def test_lab5_stops_only_its_active_sandbox_forward(self):
+        gpu_run = (ROOT / "labs" / "lab5" / "run.sh").read_text(encoding="utf-8")
+        self.assertIn('SANDBOX="openshell-lab5"', gpu_run)
+        self.assertIn("localhost/openshell-lab-agent:lab5", gpu_run)
+        self.assertIn('openshell forward stop 18080 "$SANDBOX"', gpu_run)
+        self.assertNotIn("openshell forward stop 18080 openshell-lab3", gpu_run)
 
     def test_lab1_uploads_source_after_creation_and_before_agent_execution(self):
         text = (ROOT / "labs" / "lab1" / "run.sh").read_text(encoding="utf-8")

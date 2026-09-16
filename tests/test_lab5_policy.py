@@ -1,9 +1,9 @@
 import unittest
 
 try:
-    from openshell_lab import lab5_policy
+    from openshell_lab import lab4_policy
 except ImportError:
-    lab5_policy = None
+    lab4_policy = None
 
 
 def effective_policy(network_marker=None):
@@ -29,13 +29,13 @@ def effective_policy(network_marker=None):
     return {"status": "effective", "policy": policy}
 
 
-class Lab5EffectivePolicyTests(unittest.TestCase):
+class Lab4EffectivePolicyTests(unittest.TestCase):
     def require_validator(self):
         self.assertIsNotNone(
-            lab5_policy,
-            "openshell_lab.lab5_policy must validate remote effective policy",
+            lab4_policy,
+            "openshell_lab.lab4_policy must validate remote effective policy",
         )
-        return lab5_policy
+        return lab4_policy
 
     def test_omitted_empty_network_map_is_accepted_as_default_deny(self):
         self.require_validator().validate_effective_policy(effective_policy())

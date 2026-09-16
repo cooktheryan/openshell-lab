@@ -9,6 +9,7 @@ DEPLOY = ROOT / "scripts" / "deploy-cpu.sh"
 COLLECT = ROOT / "scripts" / "collect-evidence.sh"
 OCR = ROOT / "review" / "run-ocr.sh"
 CPU_SEQUENCE = ROOT / "infra" / "remote" / "run-cpu-labs.sh"
+RUNNER_INSTALLER = ROOT / "infra" / "remote" / "install-runner.sh"
 
 
 class DeploymentOrchestrationTests(unittest.TestCase):
@@ -47,14 +48,21 @@ class DeploymentOrchestrationTests(unittest.TestCase):
             events.index("lab3-build"),
         )
 
-    def test_cpu_sequence_runs_lab5_after_lab3_verification(self):
+    def test_cpu_sequence_runs_lab4_after_lab3_verification(self):
+        cpu_sequence = CPU_SEQUENCE.read_text(encoding="utf-8")
+        self.assertIn("./labs/lab4/build.sh", cpu_sequence)
+        self.assertNotIn("./labs/lab5/", cpu_sequence)
         events = run_cpu_lab_sequence(CPU_SEQUENCE)
-        self.assertIn("lab5-build", events)
-        self.assertLess(events.index("lab3-verify"), events.index("lab5-build"))
+        self.assertIn("lab4-build", events)
+        self.assertLess(events.index("lab3-verify"), events.index("lab4-build"))
         self.assertEqual(
-            ["lab5-build", "lab5-run", "lab5-verify"],
+            ["lab4-build", "lab4-run", "lab4-verify"],
             events[-3:],
         )
+
+    def test_runner_defaults_to_lab5_when_vllm_is_active(self):
+        runner_installer = RUNNER_INSTALLER.read_text(encoding="utf-8")
+        self.assertIn("lab=lab5", runner_installer)
 
     def test_ssh_uses_repository_known_hosts_and_strict_checking(self):
         for expected in (
@@ -93,19 +101,19 @@ class DeploymentOrchestrationTests(unittest.TestCase):
         self.assertNotIn("provider get", self.collect)
         self.assertNotIn("credentials", self.collect.lower())
 
-    def test_lab5_evidence_is_archived_then_redacted_as_text(self):
-        self.assertIn("tar -C evidence/cpu -cf - lab5", self.collect)
+    def test_lab4_evidence_is_archived_then_redacted_as_text(self):
+        self.assertIn("tar -C evidence/cpu -cf - lab4", self.collect)
         self.assertIn('redact <"$source" >"$destination"', self.collect)
         self.assertNotIn("openshell provider get", self.collect)
         self.assertNotIn("printenv", self.collect)
 
-    def test_lab5_evidence_requires_a_complete_set_and_replaces_stale_files(self):
+    def test_lab4_evidence_requires_a_complete_set_and_replaces_stale_files(self):
         for marker in (
-            "expected-lab5-files.txt",
-            "actual-lab5-files.txt",
-            "Lab 5 evidence artifact set is incomplete or unexpected",
-            ".lab5-stage.",
-            ".lab5-previous.",
+            "expected-lab4-files.txt",
+            "actual-lab4-files.txt",
+            "Lab 4 evidence artifact set is incomplete or unexpected",
+            ".lab4-stage.",
+            ".lab4-previous.",
         ):
             self.assertIn(marker, self.collect)
 

@@ -6,17 +6,17 @@ import yaml
 
 
 ROOT = Path(__file__).parents[1]
-LAB = ROOT / "labs" / "lab5"
-POLICY_PATH = ROOT / "policies" / "lab5-streamlit.yaml"
+LAB = ROOT / "labs" / "lab4"
+POLICY_PATH = ROOT / "policies" / "lab4-streamlit.yaml"
 BASE_LOCK_PATH = ROOT / "container" / "base-image.lock"
 ROOT_README_PATH = ROOT / "README.md"
-LAB5_README_PATH = LAB / "README.md"
+LAB4_README_PATH = LAB / "README.md"
 WHY_IT_MATTERS_PATH = ROOT / "docs" / "openshell-why-it-matters.md"
 
 
-class Lab5ArtifactTests(unittest.TestCase):
+class Lab4ArtifactTests(unittest.TestCase):
     def read_required(self, path):
-        self.assertTrue(path.is_file(), f"required Lab 5 artifact is missing: {path}")
+        self.assertTrue(path.is_file(), f"required Lab 4 artifact is missing: {path}")
         return path.read_text(encoding="utf-8")
 
     def test_policy_is_hard_required_and_default_deny(self):
@@ -66,9 +66,9 @@ class Lab5ArtifactTests(unittest.TestCase):
                 copy_sources.append(without_options.split()[0])
         self.assertEqual(
             [
-                "labs/lab5/requirements.txt",
-                "labs/lab5/app.py",
-                "labs/lab5/probe.py",
+                "labs/lab4/requirements.txt",
+                "labs/lab4/app.py",
+                "labs/lab4/probe.py",
                 "src/openshell_lab/__init__.py",
                 "src/openshell_lab/streamlit_inference.py",
             ],
@@ -93,32 +93,32 @@ class Lab5ArtifactTests(unittest.TestCase):
         app = self.read_required(LAB / "app.py")
         for layer in ("Filesystem", "Network", "Process", "Provider"):
             self.assertIn(layer, app)
-        self.assertIn("OpenShell Lab 5", app)
+        self.assertIn("OpenShell Lab 4", app)
         self.assertIn("st.chat_input", app)
         self.assertIn("public_error_message", app)
 
     def test_build_records_commit_addressed_nonroot_image(self):
         build = self.read_required(LAB / "build.sh")
         self.assertIn("localhost/openshell-lab-streamlit:$short_sha", build)
-        self.assertIn("state/lab5-image.env", build)
+        self.assertIn("state/lab4-image.env", build)
         self.assertIn("1500:1500", build)
-        self.assertIn("labs/lab5/Containerfile", build)
+        self.assertIn("labs/lab4/Containerfile", build)
 
     def test_run_uses_durable_loopback_forward(self):
         run = self.read_required(LAB / "run.sh")
-        self.assertIn("openshell-lab5", run)
+        self.assertIn("openshell-lab4", run)
         self.assertIn("-- /usr/bin/sleep infinity", run)
         self.assertIn("--target-port 8501", run)
-        self.assertIn("--local 127.0.0.1:18501", run)
+        self.assertIn("--local 127.0.0.1:18401", run)
         self.assertIn("systemd-run --user", run)
-        self.assertNotIn("0.0.0.0:18501", run)
+        self.assertNotIn("0.0.0.0:18401", run)
 
     def test_verifier_covers_four_layers_and_model_probe(self):
         verify = self.read_required(LAB / "verify.sh")
         for marker in (
             "probe.py",
             "example.com",
-            "/opt/openshell-lab/lab5-write-denied",
+            "/opt/openshell-lab/lab4-write-denied",
             "CapBnd",
             "NoNewPrivs",
             "OPENAI_API_KEY",
@@ -134,35 +134,35 @@ class Lab5ArtifactTests(unittest.TestCase):
             "namespace-denied",
             "systemctl --user show",
             "ss -H -ltn",
-            "127.0.0.1:18501",
+            "127.0.0.1:18401",
             "forward-unit.txt",
             "listener.txt",
         ):
             self.assertIn(marker, verify)
         self.assertIn('[[ "$(<"$EVIDENCE_DIR/health.txt")" == "ok" ]]', verify)
 
-    def test_workshop_documentation_explains_the_lab5_boundary(self):
+    def test_workshop_documentation_explains_the_lab4_boundary(self):
         documents = {
             "root README": self.read_required(ROOT_README_PATH),
-            "Lab 5 README": self.read_required(LAB5_README_PATH),
+            "Lab 4 README": self.read_required(LAB4_README_PATH),
             "why-it-matters narrative": self.read_required(WHY_IT_MATTERS_PATH),
         }
         for name, text in documents.items():
             with self.subTest(document=name):
                 self.assertIn("inference.local", text)
-                self.assertIn("openshell-lab5", text)
+                self.assertIn("openshell-lab4", text)
                 for layer in ("Filesystem", "Network", "Process", "Provider"):
                     self.assertIn(layer, text)
 
-        tunnel = "ssh -N -L 8501:127.0.0.1:18501"
+        tunnel = "ssh -N -L 8501:127.0.0.1:18401"
         self.assertIn(tunnel, documents["root README"])
-        self.assertIn(tunnel, documents["Lab 5 README"])
+        self.assertIn(tunnel, documents["Lab 4 README"])
 
-    def test_public_lab5_guidance_contains_no_obsolete_secret_or_network_path(self):
+    def test_public_lab4_guidance_contains_no_obsolete_secret_or_network_path(self):
         public_guidance = "\n".join(
             (
                 self.read_required(ROOT_README_PATH),
-                self.read_required(LAB5_README_PATH),
+                self.read_required(LAB4_README_PATH),
             )
         ).lower()
         for forbidden in (
@@ -170,7 +170,7 @@ class Lab5ArtifactTests(unittest.TestCase):
             "192.168.1.101",
             "llm_api_key",
             "--env openai_api_key",
-            "0.0.0.0:18501",
+            "0.0.0.0:18401",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, public_guidance)

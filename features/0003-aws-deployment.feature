@@ -154,9 +154,17 @@ Feature: AWS lab deployment
 
   @reliability
   @event-driven
-  Rule: When Lab 3 verification completes, the CPU deployment shall execute the Lab 5 lifecycle on its distinct port 18501.
+  Rule: When Lab 3 verification completes, the CPU deployment shall execute the Lab 4 Streamlit lifecycle on its distinct port 18401.
 
-    Scenario: Lab 5 follows the report labs on a distinct forward
+    Scenario: Lab 4 follows the report labs on a distinct forward
       Given the "CPU lab sequence" configuration is available
-      When the "CPU Lab 5 sequence" is evaluated
-      Then Lab 5 should follow Lab 3 without reusing its forward
+      When the "CPU Lab 4 sequence" is evaluated
+      Then Lab 4 should follow Lab 3 without invoking Lab 5
+
+  @state-driven
+  Rule: While vLLM is active, the generated home runner shall select Lab 5 as its default lab.
+
+    Scenario: GPU host defaults to Lab 5
+      Given the "home runner installer" configuration is available
+      When the "GPU default lab" is evaluated
+      Then the generated runner should default to Lab 5

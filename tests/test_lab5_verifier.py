@@ -12,7 +12,7 @@ class Lab5VerifierTests(unittest.TestCase):
         result = run_lab5_verifier(ROOT)
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("lab5 verification passed", result.stdout)
+        self.assertIn("lab4 verification passed", result.stdout)
 
     def test_filesystem_probe_operational_error_fails(self):
         result = run_lab5_verifier(ROOT, filesystem_mode="operational-error")
@@ -27,13 +27,13 @@ class Lab5VerifierTests(unittest.TestCase):
         self.assertIn("namespace denial probe failed", result.stderr)
 
     def test_public_live_listener_fails_even_if_unit_claims_loopback(self):
-        result = run_lab5_verifier(ROOT, listener_bind="0.0.0.0:18501")
+        result = run_lab5_verifier(ROOT, listener_bind="0.0.0.0:18401")
 
         self.assertNotEqual(0, result.returncode)
-        self.assertIn("unexpected Lab 5 listeners", result.stderr)
+        self.assertIn("unexpected Lab 4 listeners", result.stderr)
 
     def test_public_unit_bind_fails(self):
-        result = run_lab5_verifier(ROOT, unit_bind="0.0.0.0:18501")
+        result = run_lab5_verifier(ROOT, unit_bind="0.0.0.0:18401")
 
         self.assertNotEqual(0, result.returncode)
         self.assertIn("public bind", result.stderr)

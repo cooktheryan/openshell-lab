@@ -13,7 +13,7 @@ class StreamlitInferenceTests(unittest.IsolatedAsyncioTestCase):
     def require_client(self):
         self.assertIsNotNone(
             streamlit_inference,
-            "openshell_lab.streamlit_inference must implement the Lab 5 contract",
+            "openshell_lab.streamlit_inference must implement the Lab 4 contract",
         )
         return streamlit_inference
 
