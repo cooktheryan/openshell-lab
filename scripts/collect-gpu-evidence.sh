@@ -48,18 +48,23 @@ remote() {
 redact() {
     sed -E \
         -e 's/sk-[A-Za-z0-9_-]{20,}/[REDACTED]/g' \
-        -e 's/AKIA[0-9A-Z]{16}/[REDACTED]/g' \
+        -e 's/(AKIA|ASIA)[0-9A-Z]{16}/[REDACTED]/g' \
+        -e 's/((AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN)[[:space:]"]*[:=][[:space:]"]*)[^[:space:]",}]+/\1[REDACTED]/g' \
         -e 's/(Authorization: *(Bearer|Basic) +)[^[:space:]]+/\1[REDACTED]/Ig'
 }
 
 mkdir -p "$EVIDENCE_ROOT"
 umask 077
-gpu_transfer=$(mktemp -d "${TMPDIR:-/tmp}/openshell-gpu-evidence.XXXXXX")
-gpu_stage=$(mktemp -d "$EVIDENCE_ROOT/.gpu-stage.XXXXXX")
+gpu_lock="$EVIDENCE_ROOT/.gpu-collect.lock"
+gpu_lock_acquired=false
+gpu_transfer=
+gpu_stage=
 gpu_previous="$EVIDENCE_ROOT/.gpu-previous.$$"
 
 cleanup_gpu_transfer() {
-    rm -rf -- "${gpu_transfer:?}"
+    if [[ -n "$gpu_transfer" && -d "$gpu_transfer" ]]; then
+        rm -rf -- "$gpu_transfer"
+    fi
     if [[ -n "${gpu_stage:-}" && -d "$gpu_stage" ]]; then
         rm -rf -- "$gpu_stage"
     fi
@@ -70,8 +75,19 @@ cleanup_gpu_transfer() {
             rm -rf -- "$gpu_previous"
         fi
     fi
+    if [[ "$gpu_lock_acquired" == true ]]; then
+        rmdir -- "$gpu_lock"
+    fi
 }
 trap cleanup_gpu_transfer EXIT
+
+if ! mkdir -- "$gpu_lock"; then
+    printf 'GPU evidence collection is already running\n' >&2
+    exit 1
+fi
+gpu_lock_acquired=true
+gpu_transfer=$(mktemp -d "${TMPDIR:-/tmp}/openshell-gpu-evidence.XXXXXX")
+gpu_stage=$(mktemp -d "$EVIDENCE_ROOT/.gpu-stage.XXXXXX")
 
 remote 'cd "$HOME/git/openshell-lab"; tar -C evidence -cf - gpu' \
     >"$gpu_transfer/gpu.tar"
@@ -80,7 +96,8 @@ if grep -Eq '(^|/)\.\.(/|$)|^/' "$gpu_transfer/members.txt"; then
     printf 'GPU evidence archive contains an unsafe path\n' >&2
     exit 1
 fi
-if grep -Ev '^gpu(/|$)' "$gpu_transfer/members.txt" | grep -q .; then
+if awk '$0 !~ /^gpu(\/|$)/ {rejected=1} END {exit !rejected}' \
+    "$gpu_transfer/members.txt"; then
     printf 'GPU evidence archive contains an out-of-scope path\n' >&2
     exit 1
 fi

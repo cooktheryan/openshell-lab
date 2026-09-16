@@ -36,7 +36,7 @@ class DeploymentOrchestrationTests(unittest.TestCase):
             else ""
         )
 
-    def _run_gpu_collector(self, members, existing_files=None):
+    def _run_gpu_collector(self, members, existing_files=None, lock_held=False):
         self.assertTrue(COLLECT_GPU.is_file(), f"missing {COLLECT_GPU}")
         existing_files = existing_files or {"stale.txt": "prior evidence\n"}
         with tempfile.TemporaryDirectory() as temporary:
@@ -46,6 +46,8 @@ class DeploymentOrchestrationTests(unittest.TestCase):
             (repository / "infra" / "aws").mkdir(parents=True)
             (repository / "state").mkdir()
             (repository / "evidence" / "gpu").mkdir(parents=True)
+            if lock_held:
+                (repository / "evidence" / ".gpu-collect.lock").mkdir()
             shutil.copy2(COLLECT_GPU, repository / "scripts")
             shutil.copy2(
                 ROOT / "infra" / "aws" / "gpu-lib.sh",
@@ -226,11 +228,17 @@ class DeploymentOrchestrationTests(unittest.TestCase):
         self.assertNotIn("printenv", self.collect_gpu)
 
     def test_gpu_evidence_redacts_each_file_and_replaces_stale_files(self):
-        secrets = (
-            "sk-" + "A" * 24,
-            "AKIA" + "B" * 16,
-            "Authorization: Bearer hidden-value",
-            "Authorization: Basic hidden-value",
+        secret_key = "secret-value-" + "C" * 32
+        session_token = "session-value-" + "D" * 64
+        payloads = (
+            ("sk-" + "A" * 24, "AS" + "IA" + "E" * 16),
+            ("AK" + "IA" + "B" * 16,),
+            (("AWS_" + "SECRET_ACCESS_KEY") + f"={secret_key}",),
+            (
+                ("AWS_" + "SESSION_TOKEN") + f"={session_token}",
+                "Authorization: Bearer hidden-value",
+                "Authorization: Basic hidden-value",
+            ),
         )
         filenames = (
             "agent-result.json",
@@ -239,7 +247,7 @@ class DeploymentOrchestrationTests(unittest.TestCase):
             "sandbox-create.log",
         )
         members = [
-            (f"gpu/{name}", f"safe-{index} {secrets[index]}\n", "file")
+            (f"gpu/{name}", f"safe-{index} {' '.join(payloads[index])}\n", "file")
             for index, name in enumerate(filenames)
         ]
 
@@ -251,7 +259,27 @@ class DeploymentOrchestrationTests(unittest.TestCase):
         for index, name in enumerate(filenames):
             self.assertIn(f"safe-{index}", collected[name])
             self.assertIn("[REDACTED]", collected[name])
-            self.assertNotIn(secrets[index], collected[name])
+            for secret in payloads[index]:
+                if "=" in secret:
+                    secret = secret.split("=", maxsplit=1)[1]
+                self.assertNotIn(secret, collected[name])
+
+    def test_gpu_evidence_refuses_collection_while_repository_lock_is_held(self):
+        required = [
+            (f"gpu/{name}", "new evidence\n", "file")
+            for name in (
+                "agent-result.json",
+                "gpus.txt",
+                "policy.json",
+                "sandbox-create.log",
+            )
+        ]
+
+        result, collected = self._run_gpu_collector(required, lock_held=True)
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("GPU evidence collection is already running", result.stderr)
+        self.assertEqual({"stale.txt": "prior evidence\n"}, collected)
 
     def test_gpu_evidence_rejects_unsafe_or_mixed_archives_without_replacement(self):
         required = [
@@ -270,6 +298,11 @@ class DeploymentOrchestrationTests(unittest.TestCase):
             "symlink": required + [("gpu/link", "policy.json", "symlink")],
             "special file": required + [("gpu/fifo", "", "fifo")],
             "mixed set": required + [("gpu/unexpected.txt", "mixed\n", "file")],
+            "many out of scope": required
+            + [
+                (f"other/rejected-{index:05d}-" + "x" * 48, "unsafe\n", "file")
+                for index in range(4096)
+            ],
         }
         for label, members in invalid_members.items():
             with self.subTest(label=label):
