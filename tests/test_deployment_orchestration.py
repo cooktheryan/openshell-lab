@@ -1,15 +1,12 @@
-import io
-import os
 from pathlib import Path
-import shutil
-import subprocess
-import tarfile
-import tempfile
 import unittest
 
 from test_support.shell_lab_harness import (
+    EVIDENCE_FILENAMES,
+    evidence_archive_members,
     generated_runner_default_lab,
     run_cpu_lab_sequence,
+    run_evidence_collector,
 )
 
 
@@ -37,85 +34,14 @@ class DeploymentOrchestrationTests(unittest.TestCase):
         )
 
     def _run_gpu_collector(self, members, existing_files=None, lock_held=False):
-        self.assertTrue(COLLECT_GPU.is_file(), f"missing {COLLECT_GPU}")
-        existing_files = existing_files or {"stale.txt": "prior evidence\n"}
-        with tempfile.TemporaryDirectory() as temporary:
-            fixture_root = Path(temporary)
-            repository = fixture_root / "repository"
-            (repository / "scripts").mkdir(parents=True)
-            (repository / "infra" / "aws").mkdir(parents=True)
-            (repository / "state").mkdir()
-            (repository / "evidence" / "gpu").mkdir(parents=True)
-            if lock_held:
-                (repository / "evidence" / ".gpu-collect.lock").mkdir()
-            shutil.copy2(COLLECT_GPU, repository / "scripts")
-            shutil.copy2(
-                ROOT / "infra" / "aws" / "gpu-lib.sh",
-                repository / "infra" / "aws",
-            )
-            (repository / "state" / "gpu-connection.env").write_text(
-                "PUBLIC_IP=192.0.2.10\n"
-                "SSH_USER=ec2-user\n"
-                "SSH_KEY_PATH=/fixture/id_rsa\n",
-                encoding="utf-8",
-            )
-            (repository / "state" / "gpu-known_hosts").write_text(
-                "fixture host key\n",
-                encoding="utf-8",
-            )
-            for name, content in existing_files.items():
-                destination = repository / "evidence" / "gpu" / name
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_text(content, encoding="utf-8")
-
-            archive = fixture_root / "gpu.tar"
-            with tarfile.open(archive, "w") as output:
-                for name, content, kind in members:
-                    info = tarfile.TarInfo(name)
-                    if kind == "file":
-                        payload = content.encode("utf-8")
-                        info.size = len(payload)
-                        output.addfile(info, io.BytesIO(payload))
-                    elif kind == "symlink":
-                        info.type = tarfile.SYMTYPE
-                        info.linkname = content
-                        output.addfile(info)
-                    elif kind == "fifo":
-                        info.type = tarfile.FIFOTYPE
-                        output.addfile(info)
-                    else:
-                        raise AssertionError(f"unsupported member type: {kind}")
-
-            fake_bin = fixture_root / "bin"
-            fake_bin.mkdir()
-            fake_ssh = fake_bin / "ssh"
-            fake_ssh.write_text(
-                "#!/usr/bin/env bash\n"
-                "set -euo pipefail\n"
-                "cat -- \"$FAKE_GPU_ARCHIVE\"\n",
-                encoding="utf-8",
-            )
-            fake_ssh.chmod(0o700)
-            environment = os.environ.copy()
-            environment.update(
-                PATH=f"{fake_bin}:{environment['PATH']}",
-                FAKE_GPU_ARCHIVE=str(archive),
-            )
-            result = subprocess.run(
-                ["bash", str(repository / "scripts" / COLLECT_GPU.name)],
-                cwd=repository,
-                env=environment,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            collected = {
-                path.relative_to(repository / "evidence" / "gpu").as_posix():
-                path.read_text(encoding="utf-8")
-                for path in (repository / "evidence" / "gpu").rglob("*")
-                if path.is_file()
-            }
-            return result, collected
+        outcome = run_evidence_collector(
+            ROOT,
+            "GPU",
+            members,
+            existing_files=existing_files,
+            lock_held=lock_held,
+        )
+        return outcome.process, outcome.collected
 
     def test_pipeline_uses_strict_failure_handling_and_required_order(self):
         self.assertIn("set -euo pipefail", self.deploy)
@@ -197,7 +123,9 @@ class DeploymentOrchestrationTests(unittest.TestCase):
         self.assertNotIn("credentials", self.collect.lower())
 
     def test_lab4_evidence_is_archived_then_redacted_as_text(self):
-        self.assertIn("tar -C evidence/cpu -cf - lab4", self.collect)
+        self.assertIn(
+            'tar -C "$repository/evidence/cpu" -cf - lab4', self.collect
+        )
         self.assertNotIn("evidence/cpu -cf - lab5", self.collect)
         self.assertIn('redact <"$source" >"$destination"', self.collect)
         self.assertNotIn("openshell provider get", self.collect)
@@ -309,6 +237,110 @@ class DeploymentOrchestrationTests(unittest.TestCase):
                 result, collected = self._run_gpu_collector(members)
                 self.assertNotEqual(0, result.returncode)
                 self.assertEqual({"stale.txt": "prior evidence\n"}, collected)
+
+    def test_collectors_accept_one_occurrence_of_each_exact_artifact(self):
+        for collector in ("CPU", "GPU"):
+            with self.subTest(collector=collector):
+                directory = "lab4/" if collector == "CPU" else "gpu/"
+                outcome = run_evidence_collector(
+                    ROOT,
+                    collector,
+                    [(directory, "", "directory")]
+                    + evidence_archive_members(collector),
+                )
+                self.assertEqual(
+                    0,
+                    outcome.process.returncode,
+                    outcome.process.stdout + outcome.process.stderr,
+                )
+                self.assertEqual(
+                    set(EVIDENCE_FILENAMES[collector]),
+                    set(outcome.collected),
+                )
+
+    def test_collectors_reject_duplicate_members_without_replacement(self):
+        for collector in ("CPU", "GPU"):
+            with self.subTest(collector=collector):
+                members = evidence_archive_members(collector)
+                members.append(members[0])
+                outcome = run_evidence_collector(ROOT, collector, members)
+                self.assertNotEqual(0, outcome.process.returncode)
+                self.assertIn("duplicate", outcome.process.stderr.lower())
+                self.assertEqual(
+                    {"stale.txt": "prior evidence\n"}, outcome.collected
+                )
+
+    def test_collectors_fail_closed_when_remote_directory_selection_fails(self):
+        for collector in ("CPU", "GPU"):
+            with self.subTest(collector=collector):
+                outcome = run_evidence_collector(
+                    ROOT,
+                    collector,
+                    evidence_archive_members(collector),
+                    remote_directory_missing=True,
+                )
+                self.assertNotEqual(0, outcome.process.returncode)
+                self.assertEqual(
+                    {"stale.txt": "prior evidence\n"}, outcome.collected
+                )
+
+    def test_cpu_scope_validation_consumes_large_invalid_member_list(self):
+        members = evidence_archive_members("CPU")
+        members.extend(
+            (f"other/rejected-{index:05d}-" + "x" * 48, "unsafe\n", "file")
+            for index in range(4096)
+        )
+
+        outcome = run_evidence_collector(ROOT, "CPU", members)
+
+        self.assertNotEqual(0, outcome.process.returncode)
+        self.assertIn("out-of-scope", outcome.process.stderr)
+        self.assertEqual({"stale.txt": "prior evidence\n"}, outcome.collected)
+
+    def test_cpu_evidence_redacts_each_aws_credential_form_from_every_file(self):
+        values = (
+            "AS" + "IA" + "A" * 16,
+            "synthetic-secret-" + "S" * 32,
+            "synthetic-session-" + "T" * 64,
+        )
+        payload = " ".join(
+            (
+                values[0],
+                ("AWS_" + "SECRET_ACCESS_KEY") + "=" + values[1],
+                ("AWS_" + "SESSION_TOKEN") + ": " + values[2],
+            )
+        )
+        outcome = run_evidence_collector(
+            ROOT,
+            "CPU",
+            evidence_archive_members("CPU", payload + "\n"),
+        )
+
+        self.assertEqual(
+            0,
+            outcome.process.returncode,
+            outcome.process.stdout + outcome.process.stderr,
+        )
+        self.assertEqual(set(EVIDENCE_FILENAMES["CPU"]), set(outcome.collected))
+        for content in outcome.collected.values():
+            self.assertIn("[REDACTED]", content)
+            for value in values:
+                self.assertNotIn(value, content)
+
+    def test_cpu_evidence_refuses_publication_while_lock_is_held(self):
+        outcome = run_evidence_collector(
+            ROOT,
+            "CPU",
+            evidence_archive_members("CPU"),
+            lock_held=True,
+        )
+
+        self.assertNotEqual(0, outcome.process.returncode)
+        self.assertIn(
+            "CPU evidence collection is already running", outcome.process.stderr
+        )
+        self.assertEqual({"stale.txt": "prior evidence\n"}, outcome.collected)
+        self.assertEqual((), outcome.ssh_commands)
 
     def test_ocr_script_reviews_security_and_correctness(self):
         text = OCR.read_text(encoding="utf-8")

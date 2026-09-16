@@ -6,6 +6,8 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
 # shellcheck source=infra/aws/gpu-lib.sh
 source "$ROOT/infra/aws/gpu-lib.sh"
+# shellcheck source=scripts/credential-patterns.sh
+source "$ROOT/scripts/credential-patterns.sh"
 
 if [[ ! -f "$GPU_STATE_FILE" ]]; then
     printf 'missing GPU connection state: %s\n' "$GPU_STATE_FILE" >&2
@@ -47,10 +49,10 @@ remote() {
 
 redact() {
     sed -E \
-        -e 's/sk-[A-Za-z0-9_-]{20,}/[REDACTED]/g' \
-        -e 's/(AKIA|ASIA)[0-9A-Z]{16}/[REDACTED]/g' \
-        -e 's/((AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN)[[:space:]"]*[:=][[:space:]"]*)[^[:space:]",}]+/\1[REDACTED]/g' \
-        -e 's/(Authorization: *(Bearer|Basic) +)[^[:space:]]+/\1[REDACTED]/Ig'
+        -e "s/${OPENAI_SECRET_PATTERN}/[REDACTED]/g" \
+        -e "s/${AWS_ACCESS_KEY_ID_PATTERN}/[REDACTED]/g" \
+        -e "s/${AWS_LABELED_SECRET_PATTERN}/\\1[REDACTED]/g" \
+        -e "s/${AUTHORIZATION_VALUE_PATTERN}/\\1[REDACTED]/Ig"
 }
 
 mkdir -p "$EVIDENCE_ROOT"
@@ -89,7 +91,7 @@ gpu_lock_acquired=true
 gpu_transfer=$(mktemp -d "${TMPDIR:-/tmp}/openshell-gpu-evidence.XXXXXX")
 gpu_stage=$(mktemp -d "$EVIDENCE_ROOT/.gpu-stage.XXXXXX")
 
-remote 'cd "$HOME/git/openshell-lab"; tar -C evidence -cf - gpu' \
+remote 'set -eu; repository="$HOME/git/openshell-lab"; test -d "$repository/evidence/gpu"; tar -C "$repository/evidence" -cf - gpu' \
     >"$gpu_transfer/gpu.tar"
 tar -tf "$gpu_transfer/gpu.tar" >"$gpu_transfer/members.txt"
 if grep -Eq '(^|/)\.\.(/|$)|^/' "$gpu_transfer/members.txt"; then
@@ -101,7 +103,40 @@ if awk '$0 !~ /^gpu(\/|$)/ {rejected=1} END {exit !rejected}' \
     printf 'GPU evidence archive contains an out-of-scope path\n' >&2
     exit 1
 fi
-if tar -tvf "$gpu_transfer/gpu.tar" | awk '$1 !~ /^[-d]/ {found=1} END {exit !found}'; then
+if awk 'seen[$0]++ {duplicate=1} END {exit !duplicate}' \
+    "$gpu_transfer/members.txt"; then
+    printf 'GPU evidence archive contains a duplicate archive member\n' >&2
+    exit 1
+fi
+printf '%s\n' \
+    agent-result.json \
+    gpus.txt \
+    policy.json \
+    sandbox-create.log \
+    >"$gpu_transfer/expected-gpu-files.txt"
+if ! awk '
+    NR == FNR { expected["gpu/" $0] = 1; next }
+    $0 == "gpu" || $0 == "gpu/" {
+        root_entries++
+        if (root_entries > 1) invalid = 1
+        next
+    }
+    !($0 in expected) { invalid = 1 }
+    { count[$0]++ }
+    END {
+        for (name in expected) {
+            if (count[name] != 1) invalid = 1
+        }
+        exit invalid
+    }
+' "$gpu_transfer/expected-gpu-files.txt" \
+    "$gpu_transfer/members.txt"; then
+    printf 'GPU evidence archive member occurrences are not exact\n' >&2
+    exit 1
+fi
+tar -tvf "$gpu_transfer/gpu.tar" >"$gpu_transfer/member-types.txt"
+if awk '$1 !~ /^[-d]/ {found=1} END {exit !found}' \
+    "$gpu_transfer/member-types.txt"; then
     printf 'GPU evidence archive contains a link or special file\n' >&2
     exit 1
 fi
@@ -123,12 +158,6 @@ if find "$gpu_transfer/extracted/gpu" -mindepth 1 -type d \
     exit 1
 fi
 
-printf '%s\n' \
-    agent-result.json \
-    gpus.txt \
-    policy.json \
-    sandbox-create.log \
-    >"$gpu_transfer/expected-gpu-files.txt"
 find "$gpu_transfer/extracted/gpu" -type f -print \
     | sed "s|^$gpu_transfer/extracted/gpu/||" \
     | LC_ALL=C sort >"$gpu_transfer/actual-gpu-files.txt"

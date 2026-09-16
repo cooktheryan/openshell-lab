@@ -15,12 +15,16 @@ from openshell_lab.tool_agent import (
     recoverable_tool_error,
 )
 from test_support.shell_lab_harness import (
+    EVIDENCE_FILENAMES,
+    evidence_archive_members,
     generated_runner_default_lab,
     run_cpu_start,
     run_gpu_profile_detector,
     run_cpu_lab_sequence,
+    run_evidence_collector,
     run_forwarded_launcher,
     run_lab4_launcher,
+    run_aws_secret_scan_matrix,
     run_secret_scan_with_failing_search,
     run_secret_scan_without_rg,
 )
@@ -354,6 +358,24 @@ class LabChecks:
             self.context.lab_state["secret_scanner_path"] = (
                 Path(__file__).parents[3] / "scripts" / "scan-secrets.sh"
             )
+        elif configuration == "AWS credential scanner matrix":
+            self.context.lab_state["secret_scanner_path"] = (
+                Path(__file__).parents[3] / "scripts" / "scan-secrets.sh"
+            )
+        elif configuration in {"CPU evidence collector", "GPU evidence collector"}:
+            self.context.lab_state["repository_root"] = Path(__file__).parents[3]
+            self.context.lab_state["collector_kind"] = configuration.split()[0]
+        elif configuration == "public Lab 5 documentation":
+            root = Path(__file__).parents[3]
+            self.context.lab_state["lab5_runbook"] = (
+                root / "labs" / "lab5" / "README.md"
+            ).read_text(encoding="utf-8")
+            self.context.lab_state["evidence_index"] = (
+                root / "docs" / "evidence-index.md"
+            ).read_text(encoding="utf-8")
+            self.context.lab_state["gpu_evidence_exists"] = (
+                root / "evidence" / "gpu"
+            ).exists()
         elif configuration == "Lab 4 managed inference":
             self.context.lab_state["configuration"] = configuration
         elif configuration == "Streamlit image metadata":
@@ -693,6 +715,110 @@ class LabChecks:
                     ".lab4-previous.",
                 )
             )
+        elif subject == "AWS credential scanner matrix":
+            self.context.lab_state["aws_scanner_results"] = (
+                run_aws_secret_scan_matrix(
+                    self.context.lab_state["secret_scanner_path"]
+                )
+            )
+        elif subject == "single archive member occurrences":
+            collector = self.context.lab_state["collector_kind"]
+            directory = "lab4/" if collector == "CPU" else "gpu/"
+            self.context.lab_state["collector_outcome"] = run_evidence_collector(
+                self.context.lab_state["repository_root"],
+                collector,
+                [(directory, "", "directory")]
+                + evidence_archive_members(collector),
+            )
+        elif subject == "duplicate archive member occurrences":
+            collector = self.context.lab_state["collector_kind"]
+            members = evidence_archive_members(collector)
+            members.append(members[0])
+            self.context.lab_state["collector_outcome"] = run_evidence_collector(
+                self.context.lab_state["repository_root"], collector, members
+            )
+        elif subject == "failed remote evidence directory selection":
+            collector = self.context.lab_state["collector_kind"]
+            self.context.lab_state["collector_outcome"] = run_evidence_collector(
+                self.context.lab_state["repository_root"],
+                collector,
+                evidence_archive_members(collector),
+                remote_directory_missing=True,
+            )
+        elif subject == "CPU AWS evidence redaction":
+            values = (
+                "AS" + "IA" + "A" * 16,
+                "synthetic-secret-" + "S" * 32,
+                "synthetic-session-" + "T" * 64,
+            )
+            payload = " ".join(
+                (
+                    values[0],
+                    ("AWS_" + "SECRET_ACCESS_KEY") + "=" + values[1],
+                    ("AWS_" + "SESSION_TOKEN") + ": " + values[2],
+                )
+            )
+            self.context.lab_state["credential_values"] = values
+            self.context.lab_state["collector_outcome"] = run_evidence_collector(
+                self.context.lab_state["repository_root"],
+                "CPU",
+                evidence_archive_members("CPU", payload + "\n"),
+            )
+        elif subject == "large out-of-scope CPU archive":
+            members = evidence_archive_members("CPU")
+            members.extend(
+                (
+                    f"other/rejected-{index:05d}-" + "x" * 48,
+                    "unsafe\n",
+                    "file",
+                )
+                for index in range(4096)
+            )
+            self.context.lab_state["collector_outcome"] = run_evidence_collector(
+                self.context.lab_state["repository_root"], "CPU", members
+            )
+        elif subject == "held CPU publication lock":
+            self.context.lab_state["collector_outcome"] = run_evidence_collector(
+                self.context.lab_state["repository_root"],
+                "CPU",
+                evidence_archive_members("CPU"),
+                lock_held=True,
+            )
+        elif subject == "Lab 5 runbook identity":
+            runbook = self.context.lab_state["lab5_runbook"]
+            self.context.lab_state["lab5_runbook_valid"] = all(
+                marker in runbook
+                for marker in (
+                    "# Lab 5: local Qwen through vLLM",
+                    "On the GPU host",
+                    "./labs/lab5/configure-vllm.sh",
+                    "./labs/lab5/run.sh",
+                    "./labs/lab5/verify.sh",
+                    "openshell-lab5",
+                    "Lab 5 remote acceptance is pending capacity",
+                )
+            )
+        elif subject == "CPU address evidence semantics":
+            index = self.context.lab_state["evidence_index"].lower()
+            self.context.lab_state["cpu_address_semantics_valid"] = all(
+                marker in index
+                for marker in (
+                    "current connection addresses",
+                    "gitignored `state/*-connection.env`",
+                    "acceptance-time public address",
+                    "`evidence/cpu/summary.txt`",
+                )
+            )
+        elif subject == "pending GPU evidence semantics":
+            index = self.context.lab_state["evidence_index"]
+            normalized = " ".join(index.split())
+            self.context.lab_state["pending_gpu_semantics_valid"] = (
+                not self.context.lab_state["gpu_evidence_exists"]
+                and "pending GPU capacity" in index
+                and "Expected at `evidence/gpu/agent-result.json`" in index
+                and "There is no current Lab 5 GPU acceptance evidence"
+                in normalized
+            )
         else:
             raise AssertionError(f"subject not yet implemented: {subject}")
 
@@ -763,6 +889,100 @@ class LabChecks:
         _require(
             self.context.lab_state["lab4_evidence_integrity_valid"] is True,
             "Lab 4 collector can retain partial or mixed evidence",
+        )
+
+    def assert_aws_credential_scanner_matrix(self):
+        results = self.context.lab_state["aws_scanner_results"]
+        _require(len(results) == 6, "scanner matrix did not cover six AWS cases")
+        for outcome in results:
+            process = outcome.process
+            output = process.stdout + process.stderr
+            _require(
+                process.returncode != 0,
+                f"{outcome.search_tool} accepted {outcome.credential_form}",
+            )
+            _require("unsafe.txt" in process.stdout, "scanner omitted unsafe path")
+            _require(outcome.value not in output, "scanner exposed credential value")
+
+    def assert_exact_archive_member_occurrences(self):
+        collector = self.context.lab_state["collector_kind"]
+        outcome = self.context.lab_state["collector_outcome"]
+        _require(
+            outcome.process.returncode == 0,
+            f"{collector} collector rejected an exact archive",
+        )
+        _require(
+            set(outcome.collected) == set(EVIDENCE_FILENAMES[collector]),
+            f"{collector} collector published an inexact artifact set",
+        )
+
+    def assert_duplicate_archive_member_occurrences(self):
+        outcome = self.context.lab_state["collector_outcome"]
+        _require(outcome.process.returncode != 0, "duplicate archive was accepted")
+        _require("duplicate" in outcome.process.stderr.lower(), "duplicate was unexplained")
+        _require(
+            outcome.collected == {"stale.txt": "prior evidence\n"},
+            "duplicate archive replaced prior evidence",
+        )
+
+    def assert_remote_directory_selection_failure(self):
+        outcome = self.context.lab_state["collector_outcome"]
+        _require(outcome.process.returncode != 0, "failed remote selection continued")
+        _require(
+            outcome.collected == {"stale.txt": "prior evidence\n"},
+            "failed remote selection replaced prior evidence",
+        )
+
+    def assert_cpu_aws_evidence_redaction(self):
+        outcome = self.context.lab_state["collector_outcome"]
+        _require(outcome.process.returncode == 0, "CPU evidence publication failed")
+        _require(
+            set(outcome.collected) == set(EVIDENCE_FILENAMES["CPU"]),
+            "CPU evidence artifact contract changed",
+        )
+        for content in outcome.collected.values():
+            _require("[REDACTED]" in content, "CPU artifact lacks redaction marker")
+            for value in self.context.lab_state["credential_values"]:
+                _require(value not in content, "CPU artifact retained an AWS value")
+
+    def assert_large_cpu_archive_scope(self):
+        outcome = self.context.lab_state["collector_outcome"]
+        _require(outcome.process.returncode != 0, "large mixed archive was accepted")
+        _require("out-of-scope" in outcome.process.stderr, "scope failure was unexplained")
+        _require(
+            outcome.collected == {"stale.txt": "prior evidence\n"},
+            "large mixed archive replaced prior evidence",
+        )
+
+    def assert_cpu_publication_lock(self):
+        outcome = self.context.lab_state["collector_outcome"]
+        _require(outcome.process.returncode != 0, "held CPU lock was ignored")
+        _require(
+            "CPU evidence collection is already running" in outcome.process.stderr,
+            "held CPU lock rejection was unexplained",
+        )
+        _require(not outcome.ssh_commands, "collector transferred data before locking")
+        _require(
+            outcome.collected == {"stale.txt": "prior evidence\n"},
+            "held CPU lock changed prior evidence",
+        )
+
+    def assert_lab5_runbook_identity(self):
+        _require(
+            self.context.lab_state["lab5_runbook_valid"] is True,
+            "Lab 5 runbook identity or capacity status is ambiguous",
+        )
+
+    def assert_cpu_address_evidence_semantics(self):
+        _require(
+            self.context.lab_state["cpu_address_semantics_valid"] is True,
+            "evidence index conflates current and acceptance-time CPU addresses",
+        )
+
+    def assert_pending_gpu_evidence_semantics(self):
+        _require(
+            self.context.lab_state["pending_gpu_semantics_valid"] is True,
+            "evidence index presents pending GPU paths as current evidence",
         )
 
     def assert_generated_runner_defaults_to_lab5(self):

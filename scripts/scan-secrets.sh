@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=scripts/credential-patterns.sh
+source "$SCRIPT_DIR/credential-patterns.sh"
+
 scan_root=${1:-.}
 scan_root=$(cd "$scan_root" && pwd -P)
 
@@ -51,10 +55,11 @@ scan_rule() {
     done <"$file_list"
 }
 
-scan_rule aws-access-key 'AKIA[0-9A-Z]{16}'
-scan_rule openai-secret 'sk-[A-Za-z0-9_-]{20,}'
-scan_rule github-token '(github_pat_[A-Za-z0-9_]{20,}|gh[opusr]_[A-Za-z0-9_]{20,})'
-scan_rule private-key-marker '-----BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY-----'
+scan_rule aws-access-key "$AWS_ACCESS_KEY_ID_PATTERN"
+scan_rule aws-secret-value "$AWS_LABELED_SECRET_PATTERN"
+scan_rule openai-secret "$OPENAI_SECRET_PATTERN"
+scan_rule github-token "$GITHUB_SECRET_PATTERN"
+scan_rule private-key-marker "$PRIVATE_KEY_MARKER_PATTERN"
 
 if test "$found" -ne 0; then
     printf 'secret-scan: rejected credential-like content\n'

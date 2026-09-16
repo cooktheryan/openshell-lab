@@ -126,6 +126,15 @@ Feature: AWS lab deployment
       When the "secret search tool failure" is evaluated
       Then the secret scan should fail without reporting clean
 
+  @security
+  @unwanted-behavior
+  Rule: If repository content contains a temporary AWS identifier or an assigned AWS secret or session value, then the secret scanner shall reject the file through either supported search implementation without emitting the value.
+
+    Scenario: AWS credentials are rejected by both scanner implementations
+      Given the "AWS credential scanner matrix" configuration is available
+      When the "AWS credential scanner matrix" is evaluated
+      Then AWS credential forms should be rejected by both scanner implementations without exposure
+
   @state-driven
   Rule: While Lab 5 is active, the GPU deployment configuration shall run Qwen3.6-27B through exactly four homogeneous L4 or L40S GPUs with a 32768-token context limit.
 
@@ -177,3 +186,68 @@ Feature: AWS lab deployment
       Given the "home runner installer" configuration is available
       When the "GPU default lab" is evaluated
       Then the generated runner should default to Lab 5
+
+  @reliability
+  @event-driven
+  Rule: When an evidence archive is received, the CPU and GPU evidence collectors shall require exactly one occurrence of each artifact before extraction.
+
+    Scenario Outline: Exact archive member occurrences are accepted
+      Given the "<collector> evidence collector" configuration is available
+      When the "single archive member occurrences" is evaluated
+      Then the collector should publish the exact artifact set
+
+      Examples: Evidence collectors
+        | collector |
+        | CPU       |
+        | GPU       |
+
+    Scenario Outline: Duplicate archive member occurrences are rejected
+      Given the "<collector> evidence collector" configuration is available
+      When the "duplicate archive member occurrences" is evaluated
+      Then the collector should reject duplicate archive members without replacing prior evidence
+
+      Examples: Evidence collectors
+        | collector |
+        | CPU       |
+        | GPU       |
+
+  @reliability
+  @unwanted-behavior
+  Rule: If the configured remote repository directory cannot be selected, then the CPU and GPU evidence collectors shall abort transfer before replacing the prior published set.
+
+    Scenario Outline: Failed remote directory selection preserves evidence
+      Given the "<collector> evidence collector" configuration is available
+      When the "failed remote evidence directory selection" is evaluated
+      Then the collector should preserve prior evidence after remote directory selection fails
+
+      Examples: Evidence collectors
+        | collector |
+        | CPU       |
+        | GPU       |
+
+  @documentation
+  @ubiquitous
+  Rule: The Lab 5 runbook shall identify the optional Qwen GPU lifecycle and its capacity-pending acceptance status.
+
+    Scenario: Lab 5 guidance has one unambiguous identity
+      Given the "public Lab 5 documentation" configuration is available
+      When the "Lab 5 runbook identity" is evaluated
+      Then the Lab 5 runbook should describe the GPU lifecycle and pending acceptance
+
+  @documentation
+  @ubiquitous
+  Rule: The acceptance evidence index shall distinguish the current gitignored connection address from the acceptance-time CPU address snapshot.
+
+    Scenario: Current and acceptance-time CPU addresses have distinct records
+      Given the "public Lab 5 documentation" configuration is available
+      When the "CPU address evidence semantics" is evaluated
+      Then the evidence index should distinguish current connection state from the acceptance snapshot
+
+  @documentation
+  @state-driven
+  Rule: While Lab 5 GPU acceptance is pending capacity, the acceptance evidence index shall classify the GPU artifact paths as expected rather than current.
+
+    Scenario: Pending GPU artifacts are not presented as current evidence
+      Given the "public Lab 5 documentation" configuration is available
+      When the "pending GPU evidence semantics" is evaluated
+      Then the evidence index should classify absent GPU artifacts as pending capacity

@@ -15,8 +15,10 @@
 | Secret hygiene | `scripts/scan-secrets.sh` and `.gitignore` |
 
 Remote acceptance also fetched the reports through Apache from outside each
-instance. Public addresses are mutable and are deliberately kept in the
-gitignored `state/*-connection.env` files.
+instance. Current connection addresses are mutable and are kept in the
+gitignored `state/*-connection.env` files. The acceptance-time public address
+recorded in `evidence/cpu/summary.txt` is a historical snapshot of the CPU
+acceptance run, not the current connection source of truth.
 
 Labs 1–4 have current CPU acceptance evidence, with the Lab 4 artifact set
 stored beneath `evidence/cpu/lab4/`. There is no current Lab 5 GPU acceptance

@@ -7,6 +7,8 @@ from test_support.shell_lab_harness import run_gpu_profile_detector
 ROOT = Path(__file__).parents[1]
 AWS = ROOT / "infra" / "aws"
 LAB = ROOT / "labs" / "lab5"
+LAB5_README = LAB / "README.md"
+EVIDENCE_INDEX = ROOT / "docs" / "evidence-index.md"
 
 
 class Lab5ArtifactTests(unittest.TestCase):
@@ -125,6 +127,39 @@ class Lab5ArtifactTests(unittest.TestCase):
         self.assertIn('"--dtype","bfloat16"', text)
         self.assertIn("--max-num-seqs", text)
         self.assertNotIn('grep -F \'# NVIDIA/OpenShell\' "$REPORT"', text)
+
+    def test_lab5_runbook_identifies_gpu_lifecycle_and_pending_acceptance(self):
+        runbook = LAB5_README.read_text(encoding="utf-8")
+
+        self.assertTrue(runbook.startswith("# Lab 5: local Qwen through vLLM"))
+        for marker in (
+            "On the GPU host",
+            "./labs/lab5/configure-vllm.sh",
+            "./labs/lab5/run.sh",
+            "./labs/lab5/verify.sh",
+            "openshell-lab5",
+            "Lab 5 remote acceptance is pending capacity",
+        ):
+            self.assertIn(marker, runbook)
+
+    def test_evidence_index_marks_absent_gpu_artifacts_as_capacity_pending(self):
+        index = EVIDENCE_INDEX.read_text(encoding="utf-8")
+        normalized = " ".join(index.split())
+
+        self.assertFalse((ROOT / "evidence" / "gpu").exists())
+        self.assertIn("pending GPU capacity", index)
+        self.assertIn("Expected at `evidence/gpu/agent-result.json`", index)
+        self.assertIn(
+            "There is no current Lab 5 GPU acceptance evidence", normalized
+        )
+
+    def test_evidence_index_distinguishes_current_and_acceptance_time_addresses(self):
+        index = EVIDENCE_INDEX.read_text(encoding="utf-8").lower()
+
+        self.assertIn("current connection addresses", index)
+        self.assertIn("gitignored `state/*-connection.env`", index)
+        self.assertIn("acceptance-time public address", index)
+        self.assertIn("`evidence/cpu/summary.txt`", index)
 
 
 if __name__ == "__main__":

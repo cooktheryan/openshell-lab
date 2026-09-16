@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+import io
 import os
 from pathlib import Path
 import shutil
 import signal
 import subprocess
+import tarfile
 import tempfile
 
 
@@ -21,6 +23,54 @@ class LauncherResult:
 class CpuStartResult:
     process: subprocess.CompletedProcess[str]
     aws_calls: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EvidenceCollectorResult:
+    process: subprocess.CompletedProcess[str]
+    collected: dict[str, str]
+    ssh_commands: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SecretScanCaseResult:
+    search_tool: str
+    credential_form: str
+    value: str
+    process: subprocess.CompletedProcess[str]
+
+
+EVIDENCE_FILENAMES = {
+    "CPU": (
+        "filesystem-denial.txt",
+        "forward-unit.txt",
+        "health.txt",
+        "image-identity.txt",
+        "listener.txt",
+        "namespace-denial.txt",
+        "network-denial.log",
+        "policy.json",
+        "probe.json",
+        "process-status.txt",
+        "sandbox-create.log",
+    ),
+    "GPU": (
+        "agent-result.json",
+        "gpus.txt",
+        "policy.json",
+        "sandbox-create.log",
+    ),
+}
+
+
+def evidence_archive_members(
+    collector: str, content: str = "current evidence\n"
+) -> list[tuple[str, str, str]]:
+    directory = "lab4" if collector == "CPU" else "gpu"
+    return [
+        (f"{directory}/{name}", content, "file")
+        for name in EVIDENCE_FILENAMES[collector]
+    ]
 
 
 def run_gpu_profile_detector(
@@ -679,14 +729,252 @@ def generated_runner_default_lab(installer: Path) -> str:
         return event_log.read_text(encoding="utf-8").strip()
 
 
-def restricted_search_path() -> str:
+def run_evidence_collector(
+    repository: Path,
+    collector: str,
+    members: list[tuple[str, str, str]],
+    *,
+    existing_files: dict[str, str] | None = None,
+    lock_held: bool = False,
+    remote_directory_missing: bool = False,
+) -> EvidenceCollectorResult:
+    """Run a production evidence collector against deterministic SSH fixtures."""
+    if collector not in EVIDENCE_FILENAMES:
+        raise AssertionError(f"unsupported evidence collector: {collector}")
+
+    script_name = (
+        "collect-evidence.sh" if collector == "CPU" else "collect-gpu-evidence.sh"
+    )
+    library_name = "lib.sh" if collector == "CPU" else "gpu-lib.sh"
+    destination_parts = ("cpu", "lab4") if collector == "CPU" else ("gpu",)
+    existing_files = existing_files or {"stale.txt": "prior evidence\n"}
+
+    with tempfile.TemporaryDirectory() as directory:
+        fixture = Path(directory)
+        fixture_repository = fixture / "repository"
+        scripts_dir = fixture_repository / "scripts"
+        aws_dir = fixture_repository / "infra" / "aws"
+        state_dir = fixture_repository / "state"
+        evidence_root = fixture_repository / "evidence"
+        destination = evidence_root.joinpath(*destination_parts)
+        scripts_dir.mkdir(parents=True)
+        aws_dir.mkdir(parents=True)
+        state_dir.mkdir()
+        destination.mkdir(parents=True)
+
+        shutil.copy2(repository / "scripts" / script_name, scripts_dir / script_name)
+        pattern_source = repository / "scripts" / "credential-patterns.sh"
+        if pattern_source.is_file():
+            shutil.copy2(pattern_source, scripts_dir / pattern_source.name)
+        shutil.copy2(repository / "infra" / "aws" / library_name, aws_dir)
+
+        if collector == "CPU":
+            (state_dir / "cpu-connection.env").write_text(
+                "AWS_REGION=us-east-1\n"
+                "INSTANCE_ID=i-0123456789abcdef0\n"
+                "PUBLIC_IP=192.0.2.10\n"
+                "PRIVATE_IP=10.0.0.10\n"
+                "SUBNET_ID=subnet-0123456789abcdef0\n"
+                "SECURITY_GROUP_ID=sg-0123456789abcdef0\n"
+                "SSH_USER=ec2-user\n"
+                "SSH_KEY_PATH=/fixture/id_rsa\n",
+                encoding="utf-8",
+            )
+            (state_dir / "known_hosts").write_text(
+                "fixture host key\n", encoding="utf-8"
+            )
+        else:
+            (state_dir / "gpu-connection.env").write_text(
+                "PUBLIC_IP=192.0.2.10\n"
+                "SSH_USER=ec2-user\n"
+                "SSH_KEY_PATH=/fixture/id_rsa\n",
+                encoding="utf-8",
+            )
+            (state_dir / "gpu-known_hosts").write_text(
+                "fixture host key\n", encoding="utf-8"
+            )
+
+        for name, content in existing_files.items():
+            path = destination / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+
+        if lock_held:
+            lock_name = ".cpu-collect.lock" if collector == "CPU" else ".gpu-collect.lock"
+            (evidence_root / lock_name).mkdir()
+
+        archive = fixture / "evidence.tar"
+        with tarfile.open(archive, "w") as output:
+            for name, content, kind in members:
+                info = tarfile.TarInfo(name)
+                info.mode = 0o600
+                if kind == "file":
+                    payload = content.encode("utf-8")
+                    info.size = len(payload)
+                    output.addfile(info, io.BytesIO(payload))
+                elif kind == "symlink":
+                    info.type = tarfile.SYMTYPE
+                    info.linkname = content
+                    output.addfile(info)
+                elif kind == "fifo":
+                    info.type = tarfile.FIFOTYPE
+                    output.addfile(info)
+                elif kind == "directory":
+                    info.type = tarfile.DIRTYPE
+                    info.mode = 0o755
+                    output.addfile(info)
+                else:
+                    raise AssertionError(f"unsupported member type: {kind}")
+
+        lab3_archive = fixture / "lab3.tar"
+        with tarfile.open(lab3_archive, "w") as output:
+            payload = b"lab3 evidence\n"
+            info = tarfile.TarInfo("lab3/policy.json")
+            info.mode = 0o600
+            info.size = len(payload)
+            output.addfile(info, io.BytesIO(payload))
+
+        remote_home = fixture / "remote-home"
+        remote_home.mkdir()
+        if remote_directory_missing:
+            decoy_parts = (
+                ("evidence", "cpu", "lab4")
+                if collector == "CPU"
+                else ("evidence", "gpu")
+            )
+            decoy = remote_home.joinpath(*decoy_parts)
+            decoy.mkdir(parents=True)
+            for name in EVIDENCE_FILENAMES[collector]:
+                (decoy / name).write_text("decoy evidence\n", encoding="utf-8")
+
+        fake_bin = fixture / "fake-bin"
+        fake_bin.mkdir()
+        ssh_log = fixture / "ssh-commands.log"
+        _write_executable(
+            fake_bin / "ssh",
+            """#!/usr/bin/env bash
+set -euo pipefail
+command=${!#}
+printf '%s\n' "$command" >>"${SSH_COMMAND_LOG:?}"
+if [[ "$command" == *"tar "* && "$command" == *"lab3"* ]]; then
+    cat -- "${FAKE_LAB3_ARCHIVE:?}"
+elif [[ "$command" == *"tar "* ]]; then
+    if [[ "${REMOTE_DIRECTORY_MISSING:-false}" == true ]]; then
+        (
+            cd -- "${FAKE_REMOTE_HOME:?}"
+            HOME=${FAKE_REMOTE_HOME:?} /bin/bash -c "$command"
+        )
+    else
+        cat -- "${FAKE_EVIDENCE_ARCHIVE:?}"
+    fi
+else
+    printf 'fixture remote output\n'
+fi
+""",
+        )
+        _write_executable(
+            fake_bin / "curl",
+            """#!/usr/bin/env bash
+set -euo pipefail
+printf '# fixture report\n'
+""",
+        )
+
+        process = subprocess.run(
+            ["bash", str(scripts_dir / script_name)],
+            cwd=fixture_repository,
+            env={
+                **os.environ,
+                "FAKE_EVIDENCE_ARCHIVE": str(archive),
+                "FAKE_LAB3_ARCHIVE": str(lab3_archive),
+                "FAKE_REMOTE_HOME": str(remote_home),
+                "REMOTE_DIRECTORY_MISSING": (
+                    "true" if remote_directory_missing else "false"
+                ),
+                "SSH_COMMAND_LOG": str(ssh_log),
+                "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            },
+            text=True,
+            capture_output=True,
+            timeout=15,
+            check=False,
+        )
+        collected = {
+            path.relative_to(destination).as_posix(): path.read_text(
+                encoding="utf-8"
+            )
+            for path in destination.rglob("*")
+            if path.is_file()
+        }
+        ssh_commands = tuple(
+            ssh_log.read_text(encoding="utf-8").splitlines()
+            if ssh_log.is_file()
+            else ()
+        )
+        return EvidenceCollectorResult(
+            process=process,
+            collected=collected,
+            ssh_commands=ssh_commands,
+        )
+
+
+def restricted_search_path(search_tool: str = "grep") -> str:
     directory = Path(tempfile.mkdtemp())
-    for command in ("bash", "git", "grep", "mktemp", "rm"):
+    if search_tool not in {"grep", "rg"}:
+        raise AssertionError(f"unsupported search tool: {search_tool}")
+    for command in ("bash", "git", search_tool, "dirname", "mktemp", "rm"):
         resolved = shutil.which(command)
         if resolved is None:
             raise AssertionError(f"required test command not found: {command}")
         (directory / command).symlink_to(resolved)
     return str(directory)
+
+
+def run_aws_secret_scan_matrix(scanner: Path) -> tuple[SecretScanCaseResult, ...]:
+    """Exercise both scanner implementations against synthetic AWS forms."""
+    credential_cases = (
+        ("temporary access identifier", "AS" + "IA" + "T" * 16),
+        (
+            "labeled secret access key",
+            ("AWS_" + "SECRET_ACCESS_KEY") + "=" + "synthetic-" + "S" * 32,
+        ),
+        (
+            "labeled session token",
+            ("AWS_" + "SESSION_TOKEN") + ": " + "synthetic-" + "T" * 64,
+        ),
+    )
+    results = []
+    for search_tool in ("rg", "grep"):
+        search_path = restricted_search_path(search_tool)
+        try:
+            for credential_form, content in credential_cases:
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    subprocess.run(["git", "init", "-q", str(root)], check=True)
+                    (root / "unsafe.txt").write_text(content + "\n", encoding="utf-8")
+                    process = subprocess.run(
+                        [str(scanner), str(root)],
+                        text=True,
+                        capture_output=True,
+                        check=False,
+                        env={
+                            **os.environ,
+                            "LC_ALL": "C",
+                            "PATH": search_path,
+                        },
+                    )
+                    value = content.split("=", 1)[-1].split(": ", 1)[-1]
+                    results.append(
+                        SecretScanCaseResult(
+                            search_tool=search_tool,
+                            credential_form=credential_form,
+                            value=value,
+                            process=process,
+                        )
+                    )
+        finally:
+            shutil.rmtree(search_path)
+    return tuple(results)
 
 
 def run_secret_scan_without_rg(scanner: Path) -> tuple[str, subprocess.CompletedProcess]:

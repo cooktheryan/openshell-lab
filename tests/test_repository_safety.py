@@ -7,6 +7,7 @@ import unittest
 
 from test_support.shell_lab_harness import (
     restricted_search_path,
+    run_aws_secret_scan_matrix,
     run_secret_scan_with_failing_search,
 )
 
@@ -93,6 +94,23 @@ class RepositorySafetyTests(unittest.TestCase):
         self.assertEqual(2, result.returncode)
         self.assertIn("search failed", result.stderr)
         self.assertNotIn("secret-scan: clean", result.stdout)
+
+    def test_scanner_rejects_aws_credential_forms_in_both_search_paths(self):
+        results = run_aws_secret_scan_matrix(SCANNER)
+
+        self.assertEqual(6, len(results))
+        for outcome in results:
+            with self.subTest(
+                search_tool=outcome.search_tool,
+                credential_form=outcome.credential_form,
+            ):
+                process = outcome.process
+                self.assertNotEqual(0, process.returncode)
+                self.assertIn("unsafe.txt", process.stdout)
+                self.assertNotIn(
+                    outcome.value,
+                    process.stdout + process.stderr,
+                )
 
 
 if __name__ == "__main__":

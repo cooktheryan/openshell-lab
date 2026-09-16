@@ -90,3 +90,30 @@ Feature: Streamlit managed inference
       Given the "Lab 4 evidence collector" configuration is available
       When the "evidence integrity controls" is evaluated
       Then collection should reject partial or mixed evidence
+
+  @security
+  @event-driven
+  Rule: When CPU Lab 4 evidence is published, the CPU evidence collector shall replace temporary AWS identifiers and labeled secret access or session values in each artifact with a redaction marker.
+
+    Scenario: AWS credential forms are redacted from each CPU artifact
+      Given the "CPU evidence collector" configuration is available
+      When the "CPU AWS evidence redaction" is evaluated
+      Then the CPU publication should contain no AWS credential value
+
+  @security
+  @unwanted-behavior
+  Rule: If a CPU Lab 4 evidence archive contains a member outside the lab4 directory, then the CPU evidence collector shall reject the archive before replacing prior evidence.
+
+    Scenario: A large out-of-scope archive cannot bypass validation
+      Given the "CPU evidence collector" configuration is available
+      When the "large out-of-scope CPU archive" is evaluated
+      Then the CPU collector should preserve prior evidence after complete scope validation
+
+  @reliability
+  @state-driven
+  Rule: While a CPU evidence publication owns the repository lock, the CPU evidence collector shall reject a concurrent publication before changing the prior published set.
+
+    Scenario: A held CPU publication lock preserves prior evidence
+      Given the "CPU evidence collector" configuration is available
+      When the "held CPU publication lock" is evaluated
+      Then the CPU collector should reject concurrency and preserve prior evidence

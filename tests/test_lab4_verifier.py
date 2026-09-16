@@ -7,7 +7,7 @@ from test_support.shell_lab_harness import run_lab4_verifier
 ROOT = Path(__file__).parents[1]
 
 
-class Lab5VerifierTests(unittest.TestCase):
+class Lab4VerifierTests(unittest.TestCase):
     def test_expected_security_denials_and_loopback_listener_pass(self):
         result = run_lab4_verifier(ROOT)
 
