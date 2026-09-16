@@ -1,5 +1,10 @@
 # OpenShell Lab 5 Streamlit Implementation Plan
 
+> **Numbering note:** This is a historical implementation record. The current
+> workshop numbering is defined by
+> `docs/superpowers/specs/2026-09-16-renumber-streamlit-lab4-gpu-lab5-design.md`:
+> Streamlit is Lab 4 and GPU Qwen is Lab 5.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a containerized Streamlit Lab 5 on the existing CPU host that reaches GPT-5.5 only through OpenShell managed inference and demonstrates filesystem, process, network, and provider controls.

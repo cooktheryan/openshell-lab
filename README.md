@@ -1,11 +1,13 @@
 # OpenShell five-lab workshop
 
 This workshop demonstrates applications behind OpenShell across five
-progressive labs: GitHub-only egress, persistent-write confinement, deny/allow
-policy iteration, local Qwen inference through vLLM, and a protected Streamlit
-UI using managed GPT-5.5 inference. The report agent retrieves the five latest
-merged NVIDIA/OpenShell pull requests, inspects only explicitly linked issues,
-and publishes evidence-grounded Markdown.
+progressive labs. Labs 1–4 run on one CPU host: GitHub-only egress,
+persistent-write confinement, deny/allow policy iteration, and a protected
+Streamlit UI using managed GPT-5.5 inference. Lab 5 is an optional,
+capacity-sensitive GPU exercise for local Qwen inference through vLLM. The
+report agent retrieves the five latest merged NVIDIA/OpenShell pull requests,
+inspects only explicitly linked issues, and publishes evidence-grounded
+Markdown.
 
 ## Protection Layers
 
@@ -24,20 +26,20 @@ The application-focused rationale is in
 
 ## Live architecture
 
-- Labs 1–3 and 5: RHEL 10 `t3.micro` in `us-east-1`, OpenShell RPM, rootless
+- Labs 1–4: RHEL 10 `t3.micro` in `us-east-1`, OpenShell RPM, rootless
   Podman, GPT-5.5 managed inference.
-- Lab 4: RHEL 10.1 `g6.12xlarge` in `us-east-2`, four NVIDIA L4 GPUs,
+- Lab 5: RHEL 10.1 `g6.12xlarge` in `us-east-2`, four NVIDIA L4 GPUs,
   unquantized `Qwen/Qwen3.6-27B` BF16, vLLM 0.19.0, tensor parallel 4, 32K
   context, and an L4-safe 16-sequence concurrency limit. The vLLM scripts also
   support the validated four-L40S profile with a 256-sequence limit.
 - Ordinary report-agent egress: read-only `api.github.com:443` by
-  `/usr/bin/curl`; Lab 5 declares no ordinary egress.
+  `/usr/bin/curl`; Lab 4 declares no ordinary egress.
 - Model traffic: `https://inference.local/v1`, with provider credentials and
   upstream addresses held outside the agent.
 - Publication: `/var/www/html` in the sandbox, an OpenShell loopback forward,
   and Apache on port 80.
 - Streamlit: sandbox port 8501 forwarded only to CPU-host
-  `127.0.0.1:18501`, then reached through SSH.
+  `127.0.0.1:18401`, then reached through SSH.
 
 Open [the editable Excalidraw diagram](diagrams/openshell-ai-application-workflow.excalidraw)
 or [the rendered SVG](diagrams/openshell-ai-application-workflow.svg).
@@ -54,7 +56,7 @@ the dominant cost. Stop it with `./infra/aws/stop-gpu.sh` when the workshop is
 finished; do not terminate it because its EBS volume contains the driver,
 model, and compile caches.
 
-## Labs 1–3 and 5: CPU host
+## Labs 1–4: CPU host
 
 Export the OpenAI key only in the launching terminal. The deployment streams
 it over SSH standard input, configures the OpenShell provider, and unsets it.
@@ -88,8 +90,8 @@ The sequence runner is equivalent to:
 openshell forward stop 18080 openshell-lab2
 ./labs/lab3/build.sh
 ./labs/lab3/run.sh && ./labs/lab3/verify.sh
-./labs/lab5/build.sh
-./labs/lab5/run.sh && ./labs/lab5/verify.sh
+./labs/lab4/build.sh
+./labs/lab4/run.sh && ./labs/lab4/verify.sh
 ```
 
 Lab 1 verifies the proxy-enriched baseline Landlock ruleset plus three network
@@ -99,11 +101,11 @@ capability, hot-loads the GitHub-read-only policy, then succeeds with the same
 non-root image. Lab 2's forward is stopped before Lab 3 reuses loopback port
 18080; Lab 3 remains forwarded for evidence collection.
 
-Lab 5 reuses the Lab 1–3 `openai-gpt55` route but uses a separate
-containerized Streamlit image and `openshell-lab5` sandbox. Its request goes
+Lab 4 reuses the Lab 1–3 `openai-gpt55` route but uses a separate
+containerized Streamlit image and `openshell-lab4` sandbox. Its request goes
 only to `inference.local`, with no credential, provider hostname, or model
 selection in the application. Ordinary egress remains empty. Its durable
-forward uses distinct host-loopback port 18501, so it does not disturb Lab 3.
+forward uses distinct host-loopback port 18401, so it does not disturb Lab 3.
 
 Evidence-boundary violations from a model tool call remain denied, but the
 agent returns sanitized retry guidance while the existing 16-call budget has
@@ -114,7 +116,7 @@ Install and use the simple home-directory runner:
 ```shell
 ./infra/remote/install-runner.sh
 ~/run-openshell-agent.sh lab3
-~/run-openshell-agent.sh lab5
+~/run-openshell-agent.sh lab4
 ```
 
 Discover the public report URL locally:
@@ -124,16 +126,16 @@ source state/cpu-connection.env
 printf 'http://%s/openshell-lab/nvidia-openshell-last-5-merges.md\n' "$PUBLIC_IP"
 ```
 
-## Lab 5: protected Streamlit on the CPU host
+## Lab 4: protected Streamlit on the CPU host
 
 On the CPU host, build and start the application, then run the four-layer
 acceptance verifier:
 
 ```shell
 cd ~/git/openshell-lab
-./labs/lab5/build.sh
-./labs/lab5/run.sh
-./labs/lab5/verify.sh
+./labs/lab4/build.sh
+./labs/lab4/run.sh
+./labs/lab4/verify.sh
 ```
 
 The verifier proves the **Filesystem**, **Network**, **Process**, and
@@ -147,26 +149,29 @@ forward:
 
 ```shell
 source state/cpu-connection.env
-ssh -N -L 8501:127.0.0.1:18501 \
+ssh -N -L 8501:127.0.0.1:18401 \
   -i "$SSH_KEY_PATH" \
   -o StrictHostKeyChecking=yes \
   -o "UserKnownHostsFile=$PWD/state/known_hosts" \
   "$SSH_USER@$PUBLIC_IP"
 ```
 
-Then browse to `http://127.0.0.1:8501`. Do not open port 18501 in the AWS
+Then browse to `http://127.0.0.1:8501`. Do not open port 18401 in the AWS
 security group; the remote listener is intentionally loopback-only. See the
-[Lab 5 runbook](labs/lab5/README.md) for evidence paths, expected denials,
+[Lab 4 runbook](labs/lab4/README.md) for evidence paths, expected denials,
 inspection, and cleanup.
 
-## Lab 4: Qwen/vLLM GPU host
+## Lab 5: Qwen/vLLM GPU host
 
 The lifecycle script refuses to mutate any host that does not match the exact
 instance type, AMI, key, security group, and owner/project/name tags.
 
 The checked-in lifecycle now targets the stopped `g6.12xlarge` capacity host in
 `us-east-2a`. The vLLM configuration regenerates NVIDIA CDI and rejects any GPU
-layout other than four homogeneous L4 or four homogeneous L40S devices.
+layout other than four homogeneous L4 or four homogeneous L40S devices. This is
+the workshop's expensive, optional exercise: capacity can be unavailable, and
+the current Lab 5 remote acceptance remains pending until a guarded start and
+verification succeed.
 
 ```shell
 ./infra/aws/start-gpu.sh
@@ -181,11 +186,11 @@ run on the GPU host:
 cd ~/git/openshell-lab
 ./infra/remote/bootstrap-rhel10.sh
 ./labs/lab2/configure-host.sh
-./labs/lab4/configure-vllm.sh
+./labs/lab5/configure-vllm.sh
 journalctl --user -u vllm.service -f
-./labs/lab4/configure-openshell.sh
-./labs/lab4/run.sh
-./labs/lab4/verify.sh
+./labs/lab5/configure-openshell.sh
+./labs/lab5/run.sh
+./labs/lab5/verify.sh
 ./infra/remote/install-runner.sh
 ```
 
@@ -222,8 +227,8 @@ openshell status
 openshell sandbox list
 openshell inference get
 openshell provider get qwen36-local
-openshell policy get openshell-lab4 --full --output json
-openshell logs openshell-lab4 --source sandbox -n 200
+openshell policy get openshell-lab5 --full --output json
+openshell logs openshell-lab5 --source sandbox -n 200
 systemctl --user status openshell-gateway
 ```
 
@@ -244,13 +249,13 @@ rewrite the image's stored Unix modes. `read_only`, `read_write`, and
 `include_workdir` determine the paths available to the sandbox process. A host
 directory additionally requires a reviewed Podman bind mount, gateway setting
 `enable_bind_mounts = true`, and a matching in-sandbox `read_write` path. The
-Labs 2–4 mount is the worked example; Lab 5 needs no host bind mount.
+Labs 2–3 and 5 mount is the worked example; Lab 4 needs no host bind mount.
 
 Forwarded launchers save sandbox-creation diagnostics beneath `evidence/`
 instead of leaving the background forward attached to an invoking SSH session.
 This lets non-interactive deployment return while the forward remains active.
-Lab 5 delegates its forward to `openshell-lab5-forward.service` and binds only
-`127.0.0.1:18501`.
+Lab 4 delegates its forward to `openshell-lab4-forward.service` and binds only
+`127.0.0.1:18401`.
 
 Network-policy `binaries` entries identify which executable may use a network
 capability; they do not prohibit executing that binary. OpenShell v0.0.116 has
@@ -287,11 +292,11 @@ Stop and restart the CPU host with the guarded lifecycle scripts:
 ./infra/aws/start-cpu.sh
 ```
 
-Before stopping the CPU host, Lab 5 can be removed independently:
+Before stopping the CPU host, Lab 4 can be removed independently:
 
 ```shell
-systemctl --user stop openshell-lab5-forward.service
-openshell sandbox delete openshell-lab5
+systemctl --user stop openshell-lab4-forward.service
+openshell sandbox delete openshell-lab4
 ```
 
 The repository intentionally provides no termination command. The start script

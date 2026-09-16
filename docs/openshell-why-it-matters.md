@@ -12,7 +12,7 @@ evidence live in the `openshell-lab` repository.
 
 ## The honest baseline: non-root is necessary, not sufficient
 
-Lab 5 does not create a deliberately weak twin of the application. Its image
+Lab 4 does not create a deliberately weak twin of the application. Its image
 already runs as numeric UID and GID `1500:1500`, the same basic container
 hardening a production team should require. The important question is what a
 prompt-injected or malfunctioning non-root process can still do.
@@ -25,8 +25,8 @@ Without a narrower runtime boundary, a non-root process can often:
 - retain a capability bounding set and create new namespaces; and
 - receive long-lived credentials through its environment or configuration.
 
-Lab 5 puts the already non-root application inside one protected OpenShell
-sandbox, `openshell-lab5`, and verifies each additional boundary. There is no
+Lab 4 puts the already non-root application inside one protected OpenShell
+sandbox, `openshell-lab4`, and verifies each additional boundary. There is no
 plain application deployment and no public Streamlit listener to maintain or
 accidentally expose.
 
@@ -40,9 +40,9 @@ OpenShell:
 browser
   -> local 127.0.0.1:8501
   -> SSH tunnel
-  -> CPU host 127.0.0.1:18501
+  -> CPU host 127.0.0.1:18401
   -> OpenShell service forward
-  -> Streamlit in openshell-lab5 on port 8501
+  -> Streamlit in openshell-lab4 on port 8501
   -> https://inference.local/v1/chat/completions
   -> OpenShell-managed openai-gpt55 provider
 ```
@@ -62,14 +62,14 @@ provider account, upstream hostname, key, or model deployment detail.
 **What it protects:** the data and code a compromised application can read or
 change.
 
-Lab 5 exposes required operating-system and application paths as read-only.
+Lab 4 exposes required operating-system and application paths as read-only.
 It grants writes only to `/tmp` and `/dev/null`, with
 `landlock.compatibility: hard_requirement`. If the kernel cannot install the
 required Landlock rules, sandbox creation fails instead of silently weakening
 the policy.
 
 The verifier proves that a write to
-`/opt/openshell-lab/lab5-write-denied` fails. This matters even for non-root
+`/opt/openshell-lab/lab4-write-denied` fails. This matters even for non-root
 software: Unix ownership alone commonly lets an application rewrite its own
 files.
 
@@ -77,7 +77,7 @@ files.
 
 **What it protects:** where application-controlled data can leave.
 
-Lab 5 declares `network_policies: {}`. A Python request to
+Lab 4 declares `network_policies: {}`. A Python request to
 `https://example.com` must fail, and verification also requires the matching
 OpenShell denial event. A failed request without policy evidence is treated as
 an operational error, not proof of confinement.
@@ -140,24 +140,26 @@ The workshop builds evidence one boundary at a time:
    retaining bounded scratch paths.
 3. **Lab 3:** begins with no ordinary egress, proves the denial, then hot-loads
    the GitHub-only policy and completes the same report workflow.
-4. **Lab 4:** moves managed inference to local Qwen on a validated homogeneous
-   GPU topology while the application still calls `inference.local`.
-5. **Lab 5:** runs a containerized Streamlit UI on the CPU host with no
+4. **Lab 4:** runs a containerized Streamlit UI on the CPU host with no
    ordinary egress and with GPT-5.5 available only through the OpenShell proxy.
+5. **Lab 5:** optionally moves the report agent to local Qwen on a validated
+   homogeneous GPU topology while the application still calls
+   `inference.local`. This capacity-sensitive GPU exercise is expensive and
+   remote validation is pending until the guarded host can run successfully.
 
 Together they show policy iteration, not just a static configuration. An
 operator can prove what is denied, add only the needed capability, and preserve
 the same application-facing inference contract.
 
-## Run the Lab 5 proof
+## Run the Lab 4 proof
 
 On the CPU host:
 
 ```bash
 cd ~/git/openshell-lab
-./labs/lab5/build.sh
-./labs/lab5/run.sh
-./labs/lab5/verify.sh
+./labs/lab4/build.sh
+./labs/lab4/run.sh
+./labs/lab4/verify.sh
 ```
 
 From the local workstation, use the gitignored connection state and tunnel the
@@ -165,7 +167,7 @@ remote loopback listener:
 
 ```bash
 source state/cpu-connection.env
-ssh -N -L 8501:127.0.0.1:18501 \
+ssh -N -L 8501:127.0.0.1:18401 \
   -i "$SSH_KEY_PATH" \
   -o StrictHostKeyChecking=yes \
   -o "UserKnownHostsFile=$PWD/state/known_hosts" \
@@ -174,15 +176,15 @@ ssh -N -L 8501:127.0.0.1:18501 \
 
 Open `http://127.0.0.1:8501`. The UI explains the Filesystem, Network,
 Process, and Provider layers beside the chat. The full operator procedure and
-cleanup commands are in [the Lab 5 runbook](../labs/lab5/README.md).
+cleanup commands are in [the Lab 4 runbook](../labs/lab4/README.md).
 
 ## What production reviewers should ask
 
 - Does a successful model call prove that the application has no ambient
-  provider credential? Lab 5 tests both conditions separately.
-- Does a connection failure prove policy enforcement? Lab 5 requires a
+  provider credential? Lab 4 tests both conditions separately.
+- Does a connection failure prove policy enforcement? Lab 4 requires a
   corresponding OpenShell denial event.
-- Is a non-root UID the complete process boundary? Lab 5 also checks
+- Is a non-root UID the complete process boundary? Lab 4 also checks
   capabilities, `NoNewPrivs`, and namespace creation.
 - Is the UI reachable from an unintended network? The service forward binds
   only host loopback and requires the documented SSH tunnel.

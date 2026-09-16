@@ -1,5 +1,10 @@
 # OpenShell Lab 5 Streamlit Design
 
+> **Numbering note:** This is a historical implementation record. The current
+> workshop numbering is defined by
+> `docs/superpowers/specs/2026-09-16-renumber-streamlit-lab4-gpu-lab5-design.md`:
+> Streamlit is Lab 4 and GPU Qwen is Lab 5.
+
 ## Purpose
 
 Lab 5 adds a browser-based Streamlit application to the existing OpenShell

@@ -1,5 +1,10 @@
 # OpenShell Four-Lab Demonstration Design
 
+> **Numbering note:** This is a historical implementation record. The current
+> workshop numbering is defined by
+> `docs/superpowers/specs/2026-09-16-renumber-streamlit-lab4-gpu-lab5-design.md`:
+> Streamlit is Lab 4 and GPU Qwen is Lab 5.
+
 > **Superseded Lab 4 infrastructure (2026-09-14):** The guarded lifecycle now
 > targets `i-0482b1eb41a016cc4`, a `g6.12xlarge` in `us-east-2a` with four
 > NVIDIA L4 GPUs. Lab 4 accepts exactly four homogeneous L4 or L40S GPUs,

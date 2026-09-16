@@ -84,6 +84,35 @@ openshell forward stop 18080 openshell-lab2
 `infra/remote/run-cpu-labs.sh` performs this transition automatically and
 leaves the Lab 3 forward active for evidence collection.
 
+## A CPU host still has the pre-renumbering Streamlit sandbox
+
+The protected Streamlit exercise is now Lab 4. Before its first run on a CPU
+host that previously ran it as Lab 5, perform this one-time cleanup:
+
+```shell
+systemctl --user stop openshell-lab5-forward.service
+openshell sandbox delete openshell-lab5
+```
+
+Then use `./labs/lab4/build.sh`, `./labs/lab4/run.sh`, and
+`./labs/lab4/verify.sh`. The current CPU-host forward is
+`openshell-lab4-forward.service` on `127.0.0.1:18401`; do not expose it through
+the security group.
+
+## A GPU host still has the pre-renumbering Qwen sandbox
+
+The Qwen/vLLM exercise is now optional Lab 5. Before its first run on a GPU
+host that previously ran it as Lab 4, perform this one-time cleanup:
+
+```shell
+openshell forward stop 18080 openshell-lab4
+openshell sandbox delete openshell-lab4
+```
+
+Then configure and run `./labs/lab5/`. A guarded GPU start can report
+`InsufficientInstanceCapacity`; leave Lab 5 acceptance pending capacity rather
+than selecting another host or instance type.
+
 ## The secret scan prints `rg: command not found`
 
 The scanner uses ripgrep when installed and otherwise falls back to system

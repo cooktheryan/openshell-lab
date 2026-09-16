@@ -159,6 +159,17 @@ class Lab4ArtifactTests(unittest.TestCase):
         self.assertIn(tunnel, documents["root README"])
         self.assertIn(tunnel, documents["Lab 4 README"])
 
+    def test_public_guidance_uses_the_cpu_first_five_lab_sequence(self):
+        root_readme = self.read_required(ROOT_README_PATH)
+        streamlit_runbook = self.read_required(LAB4_README_PATH)
+
+        self.assertIn("Labs 1–4", root_readme)
+        self.assertIn("Lab 5: Qwen/vLLM GPU host", root_readme)
+        self.assertIn("ssh -N -L 8501:127.0.0.1:18401", root_readme)
+        self.assertNotIn("Labs 1–3 and 5", root_readme)
+        self.assertNotIn("openshell-lab5-forward.service", streamlit_runbook)
+        self.assertIn("openshell-lab4-forward.service", streamlit_runbook)
+
     def test_public_lab4_guidance_contains_no_obsolete_secret_or_network_path(self):
         public_guidance = "\n".join(
             (

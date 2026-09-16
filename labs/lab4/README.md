@@ -123,4 +123,4 @@ systemctl --user stop openshell-lab4-forward.service
 openshell sandbox delete openshell-lab4
 ```
 
-This does not remove the shared managed provider or alter Labs 1–4.
+This does not remove the shared managed provider or alter Labs 1–3.

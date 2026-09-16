@@ -15,7 +15,22 @@ hosts to 16 concurrent sequences to leave warm-up headroom, while L40S hosts
 use 256. Mixed GPU models, unsupported models, and any count other than four
 are rejected before the service is changed.
 
+Lab 5 is optional, expensive, and capacity-sensitive. Do not treat a prior
+acceptance record as current evidence: GPU evidence becomes current only after
+the guarded host starts and this Lab 5 verification succeeds.
+
 On the GPU host, run:
+
+If this host previously ran the pre-renumbering GPU exercise, perform this
+one-time cleanup before starting Lab 5:
+
+```shell
+openshell forward stop 18080 openshell-lab4
+openshell sandbox delete openshell-lab4
+```
+
+The current Lab 5 launcher owns only `openshell-lab5`; these explicit commands
+avoid deleting a different lab during normal launches.
 
 ```shell
 ./labs/lab5/configure-vllm.sh
@@ -32,4 +47,5 @@ and EC2 instance remain running after verification.
 
 Sandbox-creation diagnostics are retained in
 `evidence/gpu/sandbox-create.log`, independently of the SSH session that starts
-the lab.
+the lab. After a successful verification, the GPU evidence collector replaces
+`evidence/gpu/`; until then, Lab 5 remote acceptance is pending capacity.
