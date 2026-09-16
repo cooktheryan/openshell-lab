@@ -107,6 +107,7 @@ class Lab4ArtifactTests(unittest.TestCase):
     def test_run_uses_durable_loopback_forward(self):
         run = self.read_required(LAB / "run.sh")
         self.assertIn("openshell-lab4", run)
+        self.assertIn('FORWARD_UNIT="openshell-lab4-forward.service"', run)
         self.assertIn("-- /usr/bin/sleep infinity", run)
         self.assertIn("--target-port 8501", run)
         self.assertIn("--local 127.0.0.1:18401", run)

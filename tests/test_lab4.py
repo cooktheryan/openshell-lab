@@ -6,10 +6,10 @@ from test_support.shell_lab_harness import run_gpu_profile_detector
 
 ROOT = Path(__file__).parents[1]
 AWS = ROOT / "infra" / "aws"
-LAB = ROOT / "labs" / "lab4"
+LAB = ROOT / "labs" / "lab5"
 
 
-class Lab4ArtifactTests(unittest.TestCase):
+class Lab5ArtifactTests(unittest.TestCase):
     def test_gpu_lifecycle_is_guarded_and_never_terminates(self):
         combined = "\n".join(
             (AWS / name).read_text(encoding="utf-8")
@@ -108,6 +108,14 @@ class Lab4ArtifactTests(unittest.TestCase):
             "README.md",
         ):
             self.assertTrue((LAB / name).is_file(), name)
+
+    def test_gpu_run_uses_lab5_identity_and_report_forward(self):
+        gpu_run = (LAB / "run.sh").read_text(encoding="utf-8")
+
+        self.assertIn('SANDBOX="openshell-lab5"', gpu_run)
+        self.assertIn("openshell sandbox create", gpu_run)
+        self.assertIn("--forward 127.0.0.1:18080", gpu_run)
+        self.assertIn('IMAGE="localhost/openshell-lab-agent:lab5"', gpu_run)
 
     def test_verifier_reads_owner_only_report_through_http(self):
         text = (LAB / "verify.sh").read_text(encoding="utf-8")

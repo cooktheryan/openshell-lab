@@ -53,6 +53,8 @@ class SandboxLauncherTests(unittest.TestCase):
     def test_lab5_stops_only_its_active_sandbox_forward(self):
         gpu_run = (ROOT / "labs" / "lab5" / "run.sh").read_text(encoding="utf-8")
         self.assertIn('SANDBOX="openshell-lab5"', gpu_run)
+        self.assertIn("openshell sandbox create", gpu_run)
+        self.assertIn("--forward 127.0.0.1:18080", gpu_run)
         self.assertIn("localhost/openshell-lab-agent:lab5", gpu_run)
         self.assertIn('openshell forward stop 18080 "$SANDBOX"', gpu_run)
         self.assertNotIn("openshell forward stop 18080 openshell-lab3", gpu_run)
