@@ -65,10 +65,10 @@ Feature: AWS lab deployment
 
   @reliability
   @event-driven
-  Rule: When Lab 4 prepares its loopback forward, the Lab 4 launcher shall stop only the active sandbox forward.
+  Rule: When Lab 5 prepares its loopback forward, the Lab 5 launcher shall stop only the active sandbox forward.
 
-    Scenario: Lab 4 cleans up its own loopback forward
-      Given the "Lab 4 launcher" configuration is available
+    Scenario: Lab 5 cleans up its own loopback forward
+      Given the "Lab 5 launcher" configuration is available
       When the "loopback forward cleanup" is evaluated
       Then the forward cleanup should target the active sandbox
 
@@ -118,7 +118,7 @@ Feature: AWS lab deployment
       Then the secret scan should fail without reporting clean
 
   @state-driven
-  Rule: While Lab 4 is active, the GPU deployment configuration shall run Qwen3.6-27B through exactly four homogeneous L4 or L40S GPUs with a 32768-token context limit.
+  Rule: While Lab 5 is active, the GPU deployment configuration shall run Qwen3.6-27B through exactly four homogeneous L4 or L40S GPUs with a 32768-token context limit.
 
     Scenario: GPU inference settings match the validated topology
       Given the "GPU deployment" configuration is available
@@ -126,7 +126,7 @@ Feature: AWS lab deployment
       Then the deployment configuration should declare the validated Qwen topology
 
   @state-driven
-  Rule: While Lab 4 uses four homogeneous L4 or L40S GPUs, the GPU profile selector shall configure 16 maximum concurrent sequences for L4 or 256 for L40S.
+  Rule: While Lab 5 uses four homogeneous L4 or L40S GPUs, the GPU profile selector shall configure 16 maximum concurrent sequences for L4 or 256 for L40S.
 
     Scenario Outline: GPU concurrency matches the supported topology
       Given the GPU topology is "<topology>"
@@ -139,7 +139,7 @@ Feature: AWS lab deployment
         | four NVIDIA L40S GPUs | 256               |
 
   @unwanted-behavior
-  Rule: If Lab 4 detects a mixed, unsupported, or non-four-GPU topology, then the GPU profile selector shall reject the configuration.
+  Rule: If Lab 5 detects a mixed, unsupported, or non-four-GPU topology, then the GPU profile selector shall reject the configuration.
 
     Scenario Outline: Unsupported GPU topology is rejected
       Given the GPU topology is "<topology>"

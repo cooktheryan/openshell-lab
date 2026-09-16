@@ -460,7 +460,7 @@ class LabChecks:
             root = Path(__file__).parents[3]
             self.context.lab_state["gpu_profile_result"] = (
                 run_gpu_profile_detector(
-                    root / "labs" / "lab4" / "detect-gpu-profile.sh",
+                    root / "labs" / "lab5" / "detect-gpu-profile.sh",
                     self.context.lab_state["gpu_names"],
                 )
             )
@@ -837,11 +837,11 @@ class LabChecks:
             or result.returncode != 0
             or "sandbox-created" not in result.create_log
             or (
-                lab == "lab5"
+                lab == "lab4"
                 and "forward-start" not in result.events
             )
             or (
-                lab != "lab5"
+                lab != "lab4"
                 and "forward-ready" not in result.create_log
             )
         ]
