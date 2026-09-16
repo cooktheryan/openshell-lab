@@ -16,6 +16,7 @@ from openshell_lab.tool_agent import (
 )
 from test_support.shell_lab_harness import (
     generated_runner_default_lab,
+    run_cpu_start,
     run_gpu_profile_detector,
     run_cpu_lab_sequence,
     run_forwarded_launcher,
@@ -398,6 +399,28 @@ class LabChecks:
             self.context.lab_state["gpu_names"] = topologies[topology]
         except KeyError as error:
             raise AssertionError(f"unknown GPU topology: {topology}") from error
+
+    def load_cpu_instance(self, instance_type):
+        self.context.lab_state["repository_root"] = Path(__file__).parents[3]
+        self.context.lab_state["cpu_instance_type"] = instance_type
+
+    def request_cpu_start(self):
+        self.context.lab_state["cpu_start_result"] = run_cpu_start(
+            self.context.lab_state["repository_root"],
+            self.context.lab_state["cpu_instance_type"],
+        )
+
+    def assert_cpu_start_rejected_before_mutation(self):
+        result = self.context.lab_state["cpu_start_result"]
+        _require(result.process.returncode != 0, "mismatched CPU type was accepted")
+        _require(
+            "CPU instance identity validation failed" in result.process.stderr,
+            "CPU type rejection did not explain the identity failure",
+        )
+        _require(
+            not any("start-instances" in call for call in result.aws_calls),
+            "CPU start mutation was requested before identity rejection",
+        )
 
     def evaluate_subject(self, subject):
         if subject == "model request":

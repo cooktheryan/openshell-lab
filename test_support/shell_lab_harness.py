@@ -17,6 +17,12 @@ class LauncherResult:
     events: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class CpuStartResult:
+    process: subprocess.CompletedProcess[str]
+    aws_calls: tuple[str, ...]
+
+
 def run_gpu_profile_detector(
     detector: Path, gpu_names: tuple[str, ...]
 ) -> subprocess.CompletedProcess:
@@ -48,6 +54,90 @@ printf '%s\\n' "${GPU_NAMES:?}"
 def _write_executable(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
     path.chmod(0o755)
+
+
+def run_cpu_start(repository: Path, instance_type: str) -> CpuStartResult:
+    """Run the real CPU start lifecycle against a deterministic AWS fake."""
+    with tempfile.TemporaryDirectory() as directory:
+        fixture = Path(directory)
+        aws_dir = fixture / "infra" / "aws"
+        aws_dir.mkdir(parents=True)
+        shutil.copy2(repository / "infra" / "aws" / "lib.sh", aws_dir)
+        shutil.copy2(repository / "infra" / "aws" / "start-cpu.sh", aws_dir)
+
+        state_dir = fixture / "state"
+        state_dir.mkdir()
+        (state_dir / "cpu-connection.env").write_text(
+            "AWS_REGION=us-east-1\n"
+            "INSTANCE_ID=i-0123456789abcdef0\n"
+            "PUBLIC_IP=192.0.2.10\n"
+            "PRIVATE_IP=10.0.0.10\n"
+            "SUBNET_ID=subnet-0123456789abcdef0\n"
+            "SECURITY_GROUP_ID=sg-0123456789abcdef0\n"
+            "SSH_USER=ec2-user\n"
+            "SSH_KEY_PATH=/fixture/id_rsa\n",
+            encoding="utf-8",
+        )
+
+        fake_bin = fixture / "fake-bin"
+        fake_bin.mkdir()
+        call_log = fixture / "aws-calls.log"
+        _write_executable(
+            fake_bin / "aws",
+            """#!/usr/bin/env bash
+set -euo pipefail
+arguments=$*
+printf '%s\n' "$arguments" >>"${AWS_CALL_LOG:?}"
+if [[ "$arguments" == *" ec2 describe-tags "* \
+    && "$arguments" == *"Name=key,Values=Project"* ]]; then
+    printf 'openshell-four-labs\n'
+elif [[ "$arguments" == *" ec2 describe-tags "* \
+    && "$arguments" == *"Name=key,Values=Role"* ]]; then
+    printf 'cpu\n'
+elif [[ "$arguments" == *" ec2 describe-instances "* \
+    && "$arguments" == *"InstanceType"* \
+    && "$arguments" == *"Project"* \
+    && "$arguments" == *"Role"* ]]; then
+    printf '%s\topenshell-four-labs\tcpu\n' "${CPU_TEST_INSTANCE_TYPE:?}"
+elif [[ "$arguments" == *" ec2 describe-instances "* \
+    && "$arguments" == *"State.Name"* ]]; then
+    printf 'stopped\n'
+elif [[ "$arguments" == *" ec2 describe-instances "* \
+    && "$arguments" == *"PublicIpAddress"* ]]; then
+    printf '192.0.2.10\n'
+elif [[ "$arguments" == *" ec2 describe-instances "* \
+    && "$arguments" == *"PrivateIpAddress"* ]]; then
+    printf '10.0.0.10\n'
+elif [[ "$arguments" == *" ec2 start-instances "* ]]; then
+    exit 0
+elif [[ "$arguments" == *" ec2 wait "* ]]; then
+    exit 0
+else
+    printf 'unexpected AWS invocation: %s\n' "$arguments" >&2
+    exit 2
+fi
+""",
+        )
+        process = subprocess.run(
+            [str(aws_dir / "start-cpu.sh")],
+            cwd=fixture,
+            env={
+                **os.environ,
+                "AWS_CALL_LOG": str(call_log),
+                "CPU_TEST_INSTANCE_TYPE": instance_type,
+                "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            },
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        calls = tuple(
+            call_log.read_text(encoding="utf-8").splitlines()
+            if call_log.is_file()
+            else ()
+        )
+        return CpuStartResult(process=process, aws_calls=calls)
 
 
 def run_forwarded_launcher(

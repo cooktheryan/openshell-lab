@@ -1,6 +1,8 @@
 from pathlib import Path
 import unittest
 
+from test_support.shell_lab_harness import run_cpu_start
+
 
 ROOT = Path(__file__).parents[1]
 AWS = ROOT / "infra" / "aws"
@@ -63,13 +65,29 @@ class AwsScriptTests(unittest.TestCase):
         self.assertIn("openshell-four-labs", common)
         for script in (start, stop, describe):
             self.assertIn("load_cpu_state", script)
+        self.assertIn("validate_cpu_instance", start)
+        for script in (stop, describe):
             self.assertIn("validate_project_instance", script)
         self.assertIn("stop-instances", stop)
         self.assertLess(stop.index("validate_project_instance"), stop.index("stop-instances"))
-        self.assertLess(start.index("validate_project_instance"), start.index("start-instances"))
+        self.assertLess(start.index("validate_cpu_instance"), start.index("start-instances"))
         self.assertNotIn("terminate-instances", stop + start + describe)
         self.assertIn("start-instances", start)
         self.assertIn("describe-instances", describe)
+
+    def test_start_rejects_mismatched_instance_type_before_mutation(self):
+        result = run_cpu_start(ROOT, "m5.large")
+
+        self.assertNotEqual(result.process.returncode, 0)
+        self.assertIn("CPU instance identity validation failed", result.process.stderr)
+        self.assertTrue(
+            any("InstanceType" in call for call in result.aws_calls),
+            result.aws_calls,
+        )
+        self.assertFalse(
+            any("start-instances" in call for call in result.aws_calls),
+            result.aws_calls,
+        )
 
     def test_stop_waits_out_pending_and_stopping_states(self):
         stop = self.read("stop-cpu.sh")

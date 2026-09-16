@@ -20,6 +20,15 @@ Feature: AWS lab deployment
       Then the launcher should serialize launches and persist provisional state
 
   @security
+  @unwanted-behavior
+  Rule: If the saved CPU instance is not t3.micro, then the CPU lifecycle shall reject the start without requesting an instance mutation.
+
+    Scenario: Resized CPU instance is rejected before start
+      Given a saved CPU instance with valid project tags and type "m5.large"
+      When the operator requests a CPU start
+      Then the CPU start should fail without requesting an instance mutation
+
+  @security
   @ubiquitous
   Rule: The lab repository shall exclude credential and private-key material from version control.
 

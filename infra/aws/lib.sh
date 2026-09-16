@@ -62,6 +62,18 @@ validate_project_instance() {
     }
 }
 
+validate_cpu_instance() {
+    local instance_id=$1 snapshot expected
+    snapshot=$(aws_cli ec2 describe-instances --instance-ids "$instance_id" \
+        --query "Reservations[0].Instances[0].[InstanceType,Tags[?Key=='Project'].Value | [0],Tags[?Key=='Role'].Value | [0]]" \
+        --output text)
+    expected="$CPU_INSTANCE_TYPE"$'\t'"$PROJECT_TAG"$'\t'"$ROLE_TAG"
+    [[ "$snapshot" == "$expected" ]] || {
+        printf 'CPU instance identity validation failed; refusing start\n' >&2
+        exit 1
+    }
+}
+
 instance_state() {
     aws_cli ec2 describe-instances --instance-ids "$1" \
         --query 'Reservations[0].Instances[0].State.Name' --output text
