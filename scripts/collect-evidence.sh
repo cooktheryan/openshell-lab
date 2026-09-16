@@ -53,38 +53,38 @@ remote 'cd "$HOME/git/openshell-lab"; tar -C evidence -cf - lab3' \
     | tar -C "$EVIDENCE" -xf -
 
 umask 077
-lab5_transfer=$(mktemp -d "${TMPDIR:-/tmp}/openshell-lab5-evidence.XXXXXX")
-lab5_stage=$(mktemp -d "$EVIDENCE/.lab5-stage.XXXXXX")
-lab5_previous="$EVIDENCE/.lab5-previous.$$"
-cleanup_lab5_transfer() {
-    rm -rf -- "${lab5_transfer:?}"
-    if [[ -n "${lab5_stage:-}" && -d "$lab5_stage" ]]; then
-        rm -rf -- "$lab5_stage"
+lab4_transfer=$(mktemp -d "${TMPDIR:-/tmp}/openshell-lab4-evidence.XXXXXX")
+lab4_stage=$(mktemp -d "$EVIDENCE/.lab4-stage.XXXXXX")
+lab4_previous="$EVIDENCE/.lab4-previous.$$"
+cleanup_lab4_transfer() {
+    rm -rf -- "${lab4_transfer:?}"
+    if [[ -n "${lab4_stage:-}" && -d "$lab4_stage" ]]; then
+        rm -rf -- "$lab4_stage"
     fi
-    if [[ -d "$lab5_previous" ]]; then
-        if [[ ! -e "$EVIDENCE/lab5" ]]; then
-            mv "$lab5_previous" "$EVIDENCE/lab5"
+    if [[ -d "$lab4_previous" ]]; then
+        if [[ ! -e "$EVIDENCE/lab4" ]]; then
+            mv "$lab4_previous" "$EVIDENCE/lab4"
         else
-            rm -rf -- "$lab5_previous"
+            rm -rf -- "$lab4_previous"
         fi
     fi
 }
-trap cleanup_lab5_transfer EXIT
-remote 'cd "$HOME/git/openshell-lab"; tar -C evidence/cpu -cf - lab5' \
-    >"$lab5_transfer/lab5.tar"
-tar -tf "$lab5_transfer/lab5.tar" >"$lab5_transfer/members.txt"
-if grep -Ev '^lab5(/|$)' "$lab5_transfer/members.txt" | grep -q .; then
-    printf 'Lab 5 evidence archive contains an out-of-scope path\n' >&2
+trap cleanup_lab4_transfer EXIT
+remote 'cd "$HOME/git/openshell-lab"; tar -C evidence/cpu -cf - lab4' \
+    >"$lab4_transfer/lab4.tar"
+tar -tf "$lab4_transfer/lab4.tar" >"$lab4_transfer/members.txt"
+if grep -Ev '^lab4(/|$)' "$lab4_transfer/members.txt" | grep -q .; then
+    printf 'Lab 4 evidence archive contains an out-of-scope path\n' >&2
     exit 1
 fi
-if grep -Eq '(^|/)\.\.(/|$)|^/' "$lab5_transfer/members.txt"; then
-    printf 'Lab 5 evidence archive contains an unsafe path\n' >&2
+if grep -Eq '(^|/)\.\.(/|$)|^/' "$lab4_transfer/members.txt"; then
+    printf 'Lab 4 evidence archive contains an unsafe path\n' >&2
     exit 1
 fi
-mkdir -p "$lab5_transfer/extracted"
-tar -C "$lab5_transfer/extracted" -xf "$lab5_transfer/lab5.tar"
-if find "$lab5_transfer/extracted/lab5" -type l -print -quit | grep -q .; then
-    printf 'Lab 5 evidence archive contains a symbolic link\n' >&2
+mkdir -p "$lab4_transfer/extracted"
+tar -C "$lab4_transfer/extracted" -xf "$lab4_transfer/lab4.tar"
+if find "$lab4_transfer/extracted/lab4" -type l -print -quit | grep -q .; then
+    printf 'Lab 4 evidence archive contains a symbolic link\n' >&2
     exit 1
 fi
 printf '%s\n' \
@@ -99,35 +99,35 @@ printf '%s\n' \
     probe.json \
     process-status.txt \
     sandbox-create.log \
-    >"$lab5_transfer/expected-lab5-files.txt"
-find "$lab5_transfer/extracted/lab5" -type f -print \
-    | sed "s|^$lab5_transfer/extracted/lab5/||" \
-    | LC_ALL=C sort >"$lab5_transfer/actual-lab5-files.txt"
+    >"$lab4_transfer/expected-lab4-files.txt"
+find "$lab4_transfer/extracted/lab4" -type f -print \
+    | sed "s|^$lab4_transfer/extracted/lab4/||" \
+    | LC_ALL=C sort >"$lab4_transfer/actual-lab4-files.txt"
 if ! cmp -s \
-    "$lab5_transfer/expected-lab5-files.txt" \
-    "$lab5_transfer/actual-lab5-files.txt"; then
-    printf 'Lab 5 evidence artifact set is incomplete or unexpected\n' >&2
+    "$lab4_transfer/expected-lab4-files.txt" \
+    "$lab4_transfer/actual-lab4-files.txt"; then
+    printf 'Lab 4 evidence artifact set is incomplete or unexpected\n' >&2
     exit 1
 fi
 while IFS= read -r -d '' source; do
-    relative=${source#"$lab5_transfer/extracted/lab5/"}
-    destination="$lab5_stage/$relative"
+    relative=${source#"$lab4_transfer/extracted/lab4/"}
+    destination="$lab4_stage/$relative"
     mkdir -p "$(dirname -- "$destination")"
     redact <"$source" >"$destination"
     chmod 0600 "$destination"
-done < <(find "$lab5_transfer/extracted/lab5" -type f -print0)
+done < <(find "$lab4_transfer/extracted/lab4" -type f -print0)
 
-if [[ -e "$EVIDENCE/lab5" ]]; then
-    mv "$EVIDENCE/lab5" "$lab5_previous"
+if [[ -e "$EVIDENCE/lab4" ]]; then
+    mv "$EVIDENCE/lab4" "$lab4_previous"
 fi
-if ! mv "$lab5_stage" "$EVIDENCE/lab5"; then
-    if [[ -d "$lab5_previous" ]]; then
-        mv "$lab5_previous" "$EVIDENCE/lab5"
+if ! mv "$lab4_stage" "$EVIDENCE/lab4"; then
+    if [[ -d "$lab4_previous" ]]; then
+        mv "$lab4_previous" "$EVIDENCE/lab4"
     fi
-    printf 'failed to replace Lab 5 evidence atomically\n' >&2
+    printf 'failed to replace Lab 4 evidence atomically\n' >&2
     exit 1
 fi
-lab5_stage=
+lab4_stage=
 
 printf 'instance_id=%s\npublic_ip=%s\nreport_sha256=%s\n' \
     "$INSTANCE_ID" "$PUBLIC_IP" \
