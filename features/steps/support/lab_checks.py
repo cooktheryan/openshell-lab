@@ -18,7 +18,7 @@ from test_support.shell_lab_harness import (
     run_gpu_profile_detector,
     run_cpu_lab_sequence,
     run_forwarded_launcher,
-    run_lab5_launcher,
+    run_lab4_launcher,
     run_secret_scan_with_failing_search,
     run_secret_scan_without_rg,
 )
@@ -204,7 +204,7 @@ class LabChecks:
             "Lab 1": "lab1-github-only-baseline-filesystem.yaml",
             "GitHub-only network": "lab1-github-only-baseline-filesystem.yaml",
             "webroot-only filesystem": "lab2-webroot-only.yaml",
-            "Lab 5": "lab5-streamlit.yaml",
+            "Lab 4": "lab4-streamlit.yaml",
         }
         filename = filenames.get(policy_name)
         if filename is None:
@@ -300,9 +300,9 @@ class LabChecks:
             paths = (
                 root / "infra/aws/gpu-lib.sh",
                 root / "infra/aws/start-gpu.sh",
-                root / "labs/lab4/detect-gpu-profile.sh",
-                root / "labs/lab4/configure-vllm.sh",
-                root / "labs/lab4/configure-openshell.sh",
+                root / "labs/lab5/detect-gpu-profile.sh",
+                root / "labs/lab5/configure-vllm.sh",
+                root / "labs/lab5/configure-openshell.sh",
             )
             self.context.lab_state["gpu_config"] = "\n".join(
                 path.read_text(encoding="utf-8") for path in paths
@@ -318,9 +318,9 @@ class LabChecks:
                 lab: (root / "labs" / lab / "run.sh").read_text(encoding="utf-8")
                 for lab in ("lab1", "lab2", "lab3", "lab4", "lab5")
             }
-        elif configuration == "Lab 4 launcher":
-            path = Path(__file__).parents[3] / "labs" / "lab4" / "run.sh"
-            self.context.lab_state["lab4_launcher"] = path.read_text(
+        elif configuration == "Lab 5 launcher":
+            path = Path(__file__).parents[3] / "labs" / "lab5" / "run.sh"
+            self.context.lab_state["lab5_launcher"] = path.read_text(
                 encoding="utf-8"
             )
         elif configuration == "Lab 1 launcher":
@@ -336,6 +336,10 @@ class LabChecks:
             self.context.lab_state["cpu_sequence_path"] = (
                 Path(__file__).parents[3] / "infra" / "remote" / "run-cpu-labs.sh"
             )
+        elif configuration == "home runner installer":
+            self.context.lab_state["home_runner_installer"] = (
+                Path(__file__).parents[3] / "infra" / "remote" / "install-runner.sh"
+            ).read_text(encoding="utf-8")
         elif configuration == "secret scanner without ripgrep":
             self.context.lab_state["secret_scanner_path"] = (
                 Path(__file__).parents[3] / "scripts" / "scan-secrets.sh"
@@ -348,26 +352,26 @@ class LabChecks:
             self.context.lab_state["secret_scanner_path"] = (
                 Path(__file__).parents[3] / "scripts" / "scan-secrets.sh"
             )
-        elif configuration == "Lab 5 managed inference":
+        elif configuration == "Lab 4 managed inference":
             self.context.lab_state["configuration"] = configuration
         elif configuration == "Streamlit image metadata":
-            path = Path(__file__).parents[3] / "labs" / "lab5" / "Containerfile"
+            path = Path(__file__).parents[3] / "labs" / "lab4" / "Containerfile"
             self.context.lab_state["containerfile"] = path.read_text(
                 encoding="utf-8"
             )
-        elif configuration == "Lab 5 launcher":
-            path = Path(__file__).parents[3] / "labs" / "lab5" / "run.sh"
-            self.context.lab_state["lab5_launcher"] = path.read_text(
+        elif configuration == "Lab 4 launcher":
+            path = Path(__file__).parents[3] / "labs" / "lab4" / "run.sh"
+            self.context.lab_state["lab4_launcher"] = path.read_text(
                 encoding="utf-8"
             )
-        elif configuration == "Lab 5 verifier":
-            path = Path(__file__).parents[3] / "labs" / "lab5" / "verify.sh"
-            self.context.lab_state["lab5_verifier"] = path.read_text(
+        elif configuration == "Lab 4 verifier":
+            path = Path(__file__).parents[3] / "labs" / "lab4" / "verify.sh"
+            self.context.lab_state["lab4_verifier"] = path.read_text(
                 encoding="utf-8"
             )
-        elif configuration == "Lab 5 evidence collector":
+        elif configuration == "Lab 4 evidence collector":
             path = Path(__file__).parents[3] / "scripts" / "collect-evidence.sh"
-            self.context.lab_state["lab5_collector"] = path.read_text(
+            self.context.lab_state["lab4_collector"] = path.read_text(
                 encoding="utf-8"
             )
         else:
@@ -478,8 +482,8 @@ class LabChecks:
                 for lab, text in launchers.items()
             }
         elif subject == "loopback forward cleanup":
-            text = self.context.lab_state["lab4_launcher"]
-            self.context.lab_state["lab4_forward_cleanup_valid"] = (
+            text = self.context.lab_state["lab5_launcher"]
+            self.context.lab_state["lab5_forward_cleanup_valid"] = (
                 'openshell forward stop 18080 "$SANDBOX"' in text
                 and "openshell forward stop 18080 openshell-lab3" not in text
             )
@@ -507,10 +511,10 @@ class LabChecks:
             root = self.context.lab_state["repository_root"]
             self.context.lab_state["forwarded_launcher_results"] = {
                 lab: run_forwarded_launcher(root, lab)
-                for lab in ("lab2", "lab3", "lab4")
+                for lab in ("lab2", "lab3", "lab5")
             }
-            self.context.lab_state["forwarded_launcher_results"]["lab5"] = (
-                run_lab5_launcher(root)
+            self.context.lab_state["forwarded_launcher_results"]["lab4"] = (
+                run_lab4_launcher(root)
             )
         elif subject == "Lab 3 deny-to-allow transition":
             root = self.context.lab_state["repository_root"]
@@ -522,15 +526,19 @@ class LabChecks:
             self.context.lab_state["cpu_sequence_events"] = (
                 run_cpu_lab_sequence(path) if path.is_file() else []
             )
-        elif subject == "CPU Lab 5 sequence":
+        elif subject == "CPU Lab 4 sequence":
             path = self.context.lab_state["cpu_sequence_path"]
             root = Path(__file__).parents[3]
-            self.context.lab_state["cpu_lab5_sequence_events"] = (
+            self.context.lab_state["cpu_lab4_sequence_events"] = (
                 run_cpu_lab_sequence(path) if path.is_file() else []
             )
-            self.context.lab_state["cpu_lab5_launcher"] = (
-                root / "labs" / "lab5" / "run.sh"
+            self.context.lab_state["cpu_lab4_launcher"] = (
+                root / "labs" / "lab4" / "run.sh"
             ).read_text(encoding="utf-8")
+        elif subject == "GPU default lab":
+            self.context.lab_state["generated_runner_default_lab5"] = (
+                "lab=lab5" in self.context.lab_state["home_runner_installer"]
+            )
         elif subject == "secret scanner fallback":
             secret, result = run_secret_scan_without_rg(
                 self.context.lab_state["secret_scanner_path"]
@@ -587,32 +595,32 @@ class LabChecks:
                 self.context.lab_state["streamlit_input_rejected"] = True
             else:
                 self.context.lab_state["streamlit_input_rejected"] = False
-        elif subject == "Lab 5 network posture":
-            self.context.lab_state["lab5_network_policies"] = (
+        elif subject == "Lab 4 network posture":
+            self.context.lab_state["lab4_network_policies"] = (
                 self.context.lab_state["policy"]["network_policies"]
             )
-        elif subject == "Lab 5 forward configuration":
-            text = self.context.lab_state["lab5_launcher"]
+        elif subject == "Lab 4 forward configuration":
+            text = self.context.lab_state["lab4_launcher"]
             create_position = text.find("openshell sandbox create")
             streamlit_position = text.find("nohup streamlit run app.py")
             forward_position = text.find(
-                "openshell forward service openshell-lab5"
+                "openshell forward service openshell-lab4"
             )
             host_health_position = text.find(
-                "http://127.0.0.1:18501/_stcore/health"
+                "http://127.0.0.1:18401/_stcore/health"
             )
-            self.context.lab_state["lab5_forward_valid"] = (
+            self.context.lab_state["lab4_forward_valid"] = (
                 create_position >= 0
                 and create_position < streamlit_position < forward_position
                 and forward_position < host_health_position
                 and "systemd-run --user" in text
                 and "--target-port 8501" in text
-                and "--local 127.0.0.1:18501" in text
-                and "0.0.0.0:18501" not in text
+                and "--local 127.0.0.1:18401" in text
+                and "0.0.0.0:18401" not in text
             )
         elif subject == "verifier denial controls":
-            text = self.context.lab_state["lab5_verifier"]
-            self.context.lab_state["lab5_denial_controls_valid"] = all(
+            text = self.context.lab_state["lab4_verifier"]
+            self.context.lab_state["lab4_denial_controls_valid"] = all(
                 marker in text
                 for marker in (
                     "filesystem-write-denied",
@@ -622,13 +630,13 @@ class LabChecks:
                 )
             )
         elif subject == "live listener controls":
-            text = self.context.lab_state["lab5_verifier"]
-            self.context.lab_state["lab5_listener_controls_valid"] = all(
+            text = self.context.lab_state["lab4_verifier"]
+            self.context.lab_state["lab4_listener_controls_valid"] = all(
                 marker in text
                 for marker in (
                     "systemctl --user show",
                     "ss -H -ltn",
-                    'listeners != ["127.0.0.1:18501"]',
+                    'listeners != ["127.0.0.1:18401"]',
                 )
             )
         elif subject == "Streamlit failed inference history":
@@ -648,14 +656,14 @@ class LabChecks:
                 )
             )
         elif subject == "evidence integrity controls":
-            text = self.context.lab_state["lab5_collector"]
-            self.context.lab_state["lab5_evidence_integrity_valid"] = all(
+            text = self.context.lab_state["lab4_collector"]
+            self.context.lab_state["lab4_evidence_integrity_valid"] = all(
                 marker in text
                 for marker in (
-                    "expected-lab5-files.txt",
-                    "actual-lab5-files.txt",
-                    ".lab5-stage.",
-                    ".lab5-previous.",
+                    "expected-lab4-files.txt",
+                    "actual-lab4-files.txt",
+                    ".lab4-stage.",
+                    ".lab4-previous.",
                 )
             )
         else:
@@ -690,28 +698,28 @@ class LabChecks:
             "invalid Streamlit input reached model access",
         )
 
-    def assert_lab5_network_policy_empty(self):
+    def assert_lab4_network_policy_empty(self):
         _require(
-            self.context.lab_state["lab5_network_policies"] == {},
-            "Lab 5 grants ordinary network egress",
+            self.context.lab_state["lab4_network_policies"] == {},
+            "Lab 4 grants ordinary network egress",
         )
 
-    def assert_lab5_forward_loopback_only(self):
+    def assert_lab4_forward_loopback_only(self):
         _require(
-            self.context.lab_state["lab5_forward_valid"] is True,
-            "Lab 5 forward is not durable, ordered, and loopback-only",
+            self.context.lab_state["lab4_forward_valid"] is True,
+            "Lab 4 forward is not durable, ordered, and loopback-only",
         )
 
-    def assert_lab5_denials_fail_closed(self):
+    def assert_lab4_denials_fail_closed(self):
         _require(
-            self.context.lab_state["lab5_denial_controls_valid"] is True,
-            "Lab 5 verifier does not distinguish denials from operational failures",
+            self.context.lab_state["lab4_denial_controls_valid"] is True,
+            "Lab 4 verifier does not distinguish denials from operational failures",
         )
 
-    def assert_lab5_live_listener_loopback_only(self):
+    def assert_lab4_live_listener_loopback_only(self):
         _require(
-            self.context.lab_state["lab5_listener_controls_valid"] is True,
-            "Lab 5 verifier does not require a live loopback-only listener",
+            self.context.lab_state["lab4_listener_controls_valid"] is True,
+            "Lab 4 verifier does not require a live loopback-only listener",
         )
 
     def assert_streamlit_history_bounded(self):
@@ -724,10 +732,16 @@ class LabChecks:
             "failed inference allowed Streamlit history to exceed its bound",
         )
 
-    def assert_lab5_evidence_integrity(self):
+    def assert_lab4_evidence_integrity(self):
         _require(
-            self.context.lab_state["lab5_evidence_integrity_valid"] is True,
-            "Lab 5 collector can retain partial or mixed evidence",
+            self.context.lab_state["lab4_evidence_integrity_valid"] is True,
+            "Lab 4 collector can retain partial or mixed evidence",
+        )
+
+    def assert_generated_runner_defaults_to_lab5(self):
+        _require(
+            self.context.lab_state["generated_runner_default_lab5"] is True,
+            "generated runner does not default to Lab 5",
         )
 
     def assert_nonroot_image(self):
@@ -802,10 +816,10 @@ class LabChecks:
             "short-lived canonical process configured for: " + ", ".join(failures),
         )
 
-    def assert_lab4_forward_cleanup(self):
+    def assert_lab5_forward_cleanup(self):
         _require(
-            self.context.lab_state["lab4_forward_cleanup_valid"] is True,
-            "Lab 4 forward cleanup does not target the active sandbox",
+            self.context.lab_state["lab5_forward_cleanup_valid"] is True,
+            "Lab 5 forward cleanup does not target the active sandbox",
         )
 
     def assert_lab1_upload_ordering(self):
@@ -865,21 +879,21 @@ class LabChecks:
             "Lab 2 forward was not stopped between Lab 2 verification and Lab 3",
         )
 
-    def assert_cpu_lab5_sequence(self):
-        events = self.context.lab_state["cpu_lab5_sequence_events"]
+    def assert_cpu_lab4_sequence(self):
+        events = self.context.lab_state["cpu_lab4_sequence_events"]
         _require("lab3-verify" in events, "CPU sequence omitted Lab 3 verification")
-        _require("lab5-build" in events, "CPU sequence omitted Lab 5 build")
+        _require("lab4-build" in events, "CPU sequence omitted Lab 4 build")
         _require(
-            events.index("lab3-verify") < events.index("lab5-build"),
-            "Lab 5 started before Lab 3 verification completed",
+            events.index("lab3-verify") < events.index("lab4-build"),
+            "Lab 4 started before Lab 3 verification completed",
         )
         _require(
-            events[-3:] == ["lab5-build", "lab5-run", "lab5-verify"],
-            "CPU sequence does not finish with the Lab 5 lifecycle",
+            events[-3:] == ["lab4-build", "lab4-run", "lab4-verify"],
+            "CPU sequence does not finish with the Lab 4 lifecycle",
         )
-        launcher = self.context.lab_state["cpu_lab5_launcher"]
-        _require("18501" in launcher, "Lab 5 does not use its distinct port")
-        _require("18080" not in launcher, "Lab 5 reuses the report forward")
+        launcher = self.context.lab_state["cpu_lab4_launcher"]
+        _require("18401" in launcher, "Lab 4 does not use its distinct port")
+        _require("18080" not in launcher, "Lab 4 reuses the report forward")
 
     def assert_secret_scanner_fallback(self):
         result = self.context.lab_state["scanner_result"]

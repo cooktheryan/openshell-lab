@@ -1,4 +1,4 @@
-"""Non-UI acceptance probe for the Lab 5 managed inference route."""
+"""Non-UI acceptance probe for the Lab 4 managed inference route."""
 
 import argparse
 import asyncio

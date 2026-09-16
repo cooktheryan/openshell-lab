@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
 
-from test_support.shell_lab_harness import run_forwarded_launcher, run_lab5_launcher
+from test_support.shell_lab_harness import run_forwarded_launcher, run_lab4_launcher
 
 
 ROOT = Path(__file__).parents[1]
@@ -9,7 +9,7 @@ ROOT = Path(__file__).parents[1]
 
 class SandboxLauncherTests(unittest.TestCase):
     def test_forwarded_launchers_release_the_invoking_session(self):
-        for lab in ("lab2", "lab3", "lab4"):
+        for lab in ("lab2", "lab3", "lab5"):
             with self.subTest(lab=lab):
                 result = run_forwarded_launcher(ROOT, lab)
                 self.assertTrue(
@@ -35,7 +35,7 @@ class SandboxLauncherTests(unittest.TestCase):
         )
         self.assertIn("--local 127.0.0.1:18401", streamlit_run)
         self.assertIn('SANDBOX="openshell-lab4"', streamlit_run)
-        result = run_lab5_launcher(ROOT)
+        result = run_lab4_launcher(ROOT)
 
         self.assertTrue(result.completed, result.stderr)
         self.assertEqual(0, result.returncode, result.stderr)

@@ -4,169 +4,40 @@ set -euo pipefail
 LAB_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd -- "$LAB_DIR/../.." && pwd)
 SANDBOX="openshell-lab5"
-IMAGE_STATE="$ROOT/state/lab5-image.env"
-FORWARD_UNIT="openshell-lab5-forward.service"
-EVIDENCE_DIR="$ROOT/evidence/cpu/lab5"
+published_report=$(mktemp)
+trap 'rm -f -- "$published_report"' EXIT
 
-[[ -r "$IMAGE_STATE" ]] || {
-    printf 'Lab 5 image state is missing or unreadable\n' >&2
-    exit 1
-}
-IMAGE=$(awk -F= '$1 == "IMAGE" {print substr($0, index($0, "=") + 1)}' "$IMAGE_STATE")
-[[ "$IMAGE" =~ ^localhost/openshell-lab-streamlit:[0-9a-f]{7,12}$ ]] || {
-    printf 'Lab 5 image state is invalid\n' >&2
-    exit 1
-}
-
-mkdir -p "$EVIDENCE_DIR"
-umask 077
-
-identity=$(podman image inspect "$IMAGE" --format '{{.Config.User}}')
-[[ "$identity" == "1500:1500" ]] || {
-    printf 'Lab 5 image identity is not 1500:1500\n' >&2
-    exit 1
-}
-printf '%s\n' "$identity" >"$EVIDENCE_DIR/image-identity.txt"
-
-systemctl --user is-active --quiet "$FORWARD_UNIT" || {
-    printf 'Lab 5 loopback forward service is not active\n' >&2
-    exit 1
-}
-FORWARD_UNIT_EVIDENCE="$EVIDENCE_DIR/forward-unit.txt"
-systemctl --user show "$FORWARD_UNIT" --property=ExecStart --value \
-    >"$FORWARD_UNIT_EVIDENCE"
-if ! grep -Fq 'openshell forward service openshell-lab5' "$FORWARD_UNIT_EVIDENCE" \
-    || ! grep -Fq -- '--target-port 8501' "$FORWARD_UNIT_EVIDENCE" \
-    || ! grep -Fq -- '--local 127.0.0.1:18501' "$FORWARD_UNIT_EVIDENCE" \
-    || grep -Eq -- '--local (0\.0\.0\.0|\[?::\]?):18501' "$FORWARD_UNIT_EVIDENCE"; then
-    printf 'Lab 5 forward unit is missing the approved mapping or contains a public bind\n' >&2
+gpu_profile_settings=$("$LAB_DIR/detect-gpu-profile.sh")
+read -r GPU_PROFILE MAX_NUM_SEQS <<<"$gpu_profile_settings"
+cdi_gpu_count=$(nvidia-ctk cdi list | grep -Ec '^nvidia\.com/gpu=[0-9]+$' || true)
+[[ "$cdi_gpu_count" -eq 4 ]]
+systemctl --user is-active --quiet vllm.service
+curl --silent --show-error --fail http://127.0.0.1:8000/v1/models \
+    | grep -F 'Qwen/Qwen3.6-27B' >/dev/null
+container_args=$(podman inspect vllm-qwen36 --format '{{json .Args}}')
+grep -F -- '"--dtype","bfloat16"' <<<"$container_args" >/dev/null
+grep -F -- '"--tensor-parallel-size","4"' <<<"$container_args" >/dev/null
+grep -F -- '"--max-model-len","32768"' <<<"$container_args" >/dev/null
+grep -F -- "\"--max-num-seqs\",\"$MAX_NUM_SEQS\"" <<<"$container_args" >/dev/null
+grep -E '"tool_calls":[1-9][0-9]*' "$ROOT/evidence/gpu/agent-result.json" >/dev/null
+if openshell sandbox exec --name "$SANDBOX" --no-tty -- \
+    /usr/bin/touch /sandbox/lab5-write-denied; then
+    printf 'Lab 5 unexpectedly wrote outside approved paths\n' >&2
     exit 1
 fi
-
-LISTENER_EVIDENCE="$EVIDENCE_DIR/listener.txt"
-ss -H -ltn 'sport = :18501' >"$LISTENER_EVIDENCE"
-python3 - "$LISTENER_EVIDENCE" <<'PY'
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as stream:
-    listeners = [line.split()[3] for line in stream if line.strip()]
-if listeners != ["127.0.0.1:18501"]:
-    raise SystemExit(f"unexpected Lab 5 listeners: {listeners!r}")
-PY
-curl --silent --show-error --fail --max-time 10 \
-    http://127.0.0.1:18501/_stcore/health \
-    >"$EVIDENCE_DIR/health.txt"
-[[ "$(<"$EVIDENCE_DIR/health.txt")" == "ok" ]]
-
-POLICY_EVIDENCE="$EVIDENCE_DIR/policy.json"
-openshell policy get "$SANDBOX" --full --output json >"$POLICY_EVIDENCE"
-PYTHONPATH="$ROOT/src" python3 -m openshell_lab.lab5_policy "$POLICY_EVIDENCE"
-
-openshell sandbox exec \
-    --name "$SANDBOX" \
-    --no-tty \
-    --workdir /opt/openshell-lab \
-    --timeout 240 \
-    -- python3 probe.py >"$EVIDENCE_DIR/probe.json"
-python3 - "$EVIDENCE_DIR/probe.json" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as stream:
-    result = json.load(stream)
-assert set(result) == {"status", "response"}
-assert result["status"] == "ok"
-assert isinstance(result["response"], str) and result["response"].strip()
-PY
-
-FILESYSTEM_DENIAL_EVIDENCE="$EVIDENCE_DIR/filesystem-denial.txt"
-if ! openshell sandbox exec \
-    --name "$SANDBOX" \
-    --no-tty \
-    --timeout 15 \
-    -- python3 -c \
-    'import errno; path = "/opt/openshell-lab/lab5-write-denied"; code = "try:\n open(path, \"w\").close()\nexcept OSError as error:\n assert error.errno in (errno.EACCES, errno.EPERM)\n print(\"filesystem-write-denied\")\nelse:\n raise RuntimeError(\"application directory accepted a write\")"; exec(code)' \
-    >"$FILESYSTEM_DENIAL_EVIDENCE"; then
-    printf 'Lab 5 filesystem denial probe failed or accepted a write\n' >&2
+if openshell sandbox exec --name "$SANDBOX" --no-tty -- \
+    /usr/bin/curl --fail https://example.com/; then
+    printf 'Lab 5 unexpectedly reached an unlisted host\n' >&2
     exit 1
 fi
-grep -Fxq 'filesystem-write-denied' "$FILESYSTEM_DENIAL_EVIDENCE"
-
-network_status=0
-if openshell sandbox exec \
-    --name "$SANDBOX" \
-    --no-tty \
-    --timeout 20 \
-    -- python3 -c \
-    'import httpx; response = httpx.get("https://example.com", timeout=10); response.raise_for_status()' \
-    >/dev/null 2>&1; then
-    printf 'Lab 5 ordinary egress unexpectedly reached example.com\n' >&2
-    exit 1
-else
-    network_status=$?
-fi
-
-DENIAL_EVIDENCE="$EVIDENCE_DIR/network-denial.log"
-denial_verified=false
-for _ in $(seq 1 30); do
-    if ! openshell logs "$SANDBOX" --source sandbox -n 300 >"$DENIAL_EVIDENCE"; then
-        printf 'failed to retrieve Lab 5 denial audit events\n' >&2
-        exit 1
-    fi
-    if grep -Eq \
-        'NET:OPEN.*DENIED .*python3[^ ]*\([0-9]+\) -> example\.com:443' \
-        "$DENIAL_EVIDENCE"; then
-        denial_verified=true
-        break
-    fi
-    sleep 1
-done
-[[ "$denial_verified" == true ]] || {
-    printf 'example.com failed with status %s without a matching denial event\n' \
-        "$network_status" >&2
-    exit 1
-}
-
-PROCESS_EVIDENCE="$EVIDENCE_DIR/process-status.txt"
-openshell sandbox exec \
-    --name "$SANDBOX" \
-    --no-tty \
-    --timeout 15 \
-    -- /bin/sh -c \
-    'grep -E "^(Uid|Gid|CapBnd|NoNewPrivs):" /proc/self/status' \
-    >"$PROCESS_EVIDENCE"
-grep -Eq '^Uid:[[:space:]]+1500([[:space:]]+1500){3}$' "$PROCESS_EVIDENCE"
-grep -Eq '^Gid:[[:space:]]+1500([[:space:]]+1500){3}$' "$PROCESS_EVIDENCE"
-grep -Eq '^CapBnd:[[:space:]]+0+$' "$PROCESS_EVIDENCE"
-grep -Eq '^NoNewPrivs:[[:space:]]+1$' "$PROCESS_EVIDENCE"
-
-openshell sandbox exec \
-    --name "$SANDBOX" \
-    --no-tty \
-    --timeout 15 \
-    -- /usr/bin/test -x /usr/bin/unshare >/dev/null
-NAMESPACE_DENIAL_EVIDENCE="$EVIDENCE_DIR/namespace-denial.txt"
-if ! openshell sandbox exec \
-    --name "$SANDBOX" \
-    --no-tty \
-    --timeout 15 \
-    -- python3 -c \
-    'import subprocess; result = subprocess.run(["/usr/bin/unshare", "-Urn", "true"], capture_output=True, text=True); assert result.returncode == 1 and "Operation not permitted" in result.stderr; print("namespace-denied")' \
-    >"$NAMESPACE_DENIAL_EVIDENCE"; then
-    printf 'Lab 5 namespace denial probe failed or created a namespace\n' >&2
-    exit 1
-fi
-grep -Fxq 'namespace-denied' "$NAMESPACE_DENIAL_EVIDENCE"
-
-if ! openshell sandbox exec \
-    --name "$SANDBOX" \
-    --no-tty \
-    --timeout 15 \
-    -- python3 -c \
-    'import os, sys; names = ("OPENAI_API_KEY", "OPENAI_KEY", "AUTHORIZATION"); sys.exit(any(name in os.environ for name in names))' \
-    >/dev/null 2>&1; then
-    printf 'Lab 5 workload environment contains a forbidden credential name\n' >&2
-    exit 1
-fi
-
-printf 'lab5 verification passed; sandbox and loopback forward remain running\n'
+curl --silent --show-error --fail \
+    http://127.0.0.1/openshell-lab/nvidia-openshell-last-5-merges.md \
+    >"$published_report"
+test -s "$published_report"
+grep -F '# NVIDIA/OpenShell: Last 5 Merged Pull Requests' "$published_report" >/dev/null
+openshell policy get "$SANDBOX" --full --output json \
+    >"$ROOT/evidence/gpu/policy.json"
+nvidia-smi --query-gpu=uuid,name,memory.total --format=csv,noheader \
+    >"$ROOT/evidence/gpu/gpus.txt"
+printf 'lab5 verification passed with profile %s; Qwen and sandbox remain running\n' \
+    "$GPU_PROFILE"

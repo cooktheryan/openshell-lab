@@ -1,4 +1,4 @@
-"""Bounded, credential-free managed inference for the Lab 5 application."""
+"""Bounded, credential-free managed inference for the Lab 4 application."""
 
 from __future__ import annotations
 

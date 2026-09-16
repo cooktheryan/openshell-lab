@@ -10,11 +10,11 @@ RUN dnf install -y python3 python3-pip shadow-utils \
     && chown -R 1500:1500 /opt/openshell-lab /tmp/streamlit-home
 
 WORKDIR /opt/openshell-lab
-COPY --chown=1500:1500 labs/lab5/requirements.txt /opt/openshell-lab/requirements.txt
+COPY --chown=1500:1500 labs/lab4/requirements.txt /opt/openshell-lab/requirements.txt
 RUN python3 -m pip install --no-cache-dir -r /opt/openshell-lab/requirements.txt
 
-COPY --chown=1500:1500 labs/lab5/app.py /opt/openshell-lab/app.py
-COPY --chown=1500:1500 labs/lab5/probe.py /opt/openshell-lab/probe.py
+COPY --chown=1500:1500 labs/lab4/app.py /opt/openshell-lab/app.py
+COPY --chown=1500:1500 labs/lab4/probe.py /opt/openshell-lab/probe.py
 COPY --chown=1500:1500 src/openshell_lab/__init__.py /opt/openshell-lab/openshell_lab/__init__.py
 COPY --chown=1500:1500 src/openshell_lab/streamlit_inference.py /opt/openshell-lab/openshell_lab/streamlit_inference.py
 

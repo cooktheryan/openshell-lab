@@ -1,4 +1,4 @@
-"""OpenShell Lab 5: a protected Streamlit client for managed inference."""
+"""OpenShell Lab 4: a protected Streamlit client for managed inference."""
 
 import asyncio
 import sys
@@ -17,14 +17,14 @@ from openshell_lab.streamlit_inference import (
 SYSTEM_MESSAGE = {
     "role": "system",
     "content": (
-        "You are the OpenShell Lab 5 assistant. Explain security controls "
+        "You are the OpenShell Lab 4 assistant. Explain security controls "
         "clearly and do not claim access to credentials, tools, or hosts."
     ),
 }
 
 
-st.set_page_config(page_title="OpenShell Lab 5", page_icon="🛡️", layout="wide")
-st.title("OpenShell Lab 5")
+st.set_page_config(page_title="OpenShell Lab 4", page_icon="🛡️", layout="wide")
+st.title("OpenShell Lab 4")
 st.caption("Containerized Streamlit with credential-free OpenShell managed inference")
 
 st.sidebar.header("Active control layers")

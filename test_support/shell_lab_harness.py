@@ -216,30 +216,30 @@ esac
         )
 
 
-def run_lab5_launcher(repository: Path) -> LauncherResult:
-    """Run the real Lab 5 launcher against deterministic lifecycle fakes."""
-    source = repository / "labs" / "lab5" / "run.sh"
+def run_lab4_launcher(repository: Path) -> LauncherResult:
+    """Run the real Lab 4 launcher against deterministic lifecycle fakes."""
+    source = repository / "labs" / "lab4" / "run.sh"
     if not source.is_file():
         return LauncherResult(
             completed=False,
             returncode=None,
             stdout="",
-            stderr="Lab 5 launcher is missing",
+            stderr="Lab 4 launcher is missing",
             create_log="",
             events=(),
         )
 
     with tempfile.TemporaryDirectory() as directory:
         fixture = Path(directory)
-        run_path = fixture / "labs" / "lab5" / "run.sh"
+        run_path = fixture / "labs" / "lab4" / "run.sh"
         run_path.parent.mkdir(parents=True)
         shutil.copy2(source, run_path)
         (fixture / "policies").mkdir()
-        (fixture / "policies" / "lab5-streamlit.yaml").write_text(
+        (fixture / "policies" / "lab4-streamlit.yaml").write_text(
             "version: 1\nnetwork_policies: {}\n", encoding="utf-8"
         )
         (fixture / "state").mkdir()
-        (fixture / "state" / "lab5-image.env").write_text(
+        (fixture / "state" / "lab4-image.env").write_text(
             "IMAGE=localhost/openshell-lab-streamlit:abcdef1\n",
             encoding="utf-8",
         )
@@ -301,9 +301,9 @@ exit 0
             fake_bin / "systemd-run",
             """#!/usr/bin/env bash
 set -euo pipefail
-[[ "$*" == *"openshell forward service openshell-lab5"* ]]
+[[ "$*" == *"openshell forward service openshell-lab4"* ]]
 [[ "$*" == *"--target-port 8501"* ]]
-[[ "$*" == *"--local 127.0.0.1:18501"* ]]
+[[ "$*" == *"--local 127.0.0.1:18401"* ]]
 printf 'forward-start\n' >>"${FAKE_STATE:?}/events.log"
 """,
         )
@@ -311,7 +311,7 @@ printf 'forward-start\n' >>"${FAKE_STATE:?}/events.log"
             fake_bin / "curl",
             """#!/usr/bin/env bash
 set -euo pipefail
-[[ "$*" == *"127.0.0.1:18501/_stcore/health"* ]]
+[[ "$*" == *"127.0.0.1:18401/_stcore/health"* ]]
 printf 'host-health\n' >>"${FAKE_STATE:?}/events.log"
 """,
         )
@@ -341,7 +341,7 @@ exit 0
                 completed=False,
                 returncode=None,
                 stdout=error.stdout or "",
-                stderr=error.stderr or "Lab 5 launcher timed out",
+                stderr=error.stderr or "Lab 4 launcher timed out",
                 create_log="",
                 events=(),
             )
@@ -351,7 +351,7 @@ exit 0
             if event_log.is_file()
             else ()
         )
-        create_log_path = fixture / "evidence" / "cpu" / "lab5" / "sandbox-create.log"
+        create_log_path = fixture / "evidence" / "cpu" / "lab4" / "sandbox-create.log"
         return LauncherResult(
             completed=True,
             returncode=process.returncode,
@@ -366,29 +366,29 @@ exit 0
         )
 
 
-def run_lab5_verifier(
+def run_lab4_verifier(
     repository: Path,
     *,
     filesystem_mode: str = "denied",
     namespace_mode: str = "denied",
-    unit_bind: str = "127.0.0.1:18501",
-    listener_bind: str = "127.0.0.1:18501",
+    unit_bind: str = "127.0.0.1:18401",
+    listener_bind: str = "127.0.0.1:18401",
 ) -> subprocess.CompletedProcess:
-    """Run the real Lab 5 verifier against fault-injectable command fakes."""
+    """Run the real Lab 4 verifier against fault-injectable command fakes."""
     with tempfile.TemporaryDirectory() as directory:
         fixture = Path(directory)
-        run_path = fixture / "labs" / "lab5" / "verify.sh"
+        run_path = fixture / "labs" / "lab4" / "verify.sh"
         run_path.parent.mkdir(parents=True)
-        shutil.copy2(repository / "labs" / "lab5" / "verify.sh", run_path)
+        shutil.copy2(repository / "labs" / "lab4" / "verify.sh", run_path)
         module_dir = fixture / "src" / "openshell_lab"
         module_dir.mkdir(parents=True)
         shutil.copy2(
-            repository / "src" / "openshell_lab" / "lab5_policy.py",
-            module_dir / "lab5_policy.py",
+            repository / "src" / "openshell_lab" / "lab4_policy.py",
+            module_dir / "lab4_policy.py",
         )
         (module_dir / "__init__.py").write_text("", encoding="utf-8")
         (fixture / "state").mkdir()
-        (fixture / "state" / "lab5-image.env").write_text(
+        (fixture / "state" / "lab4-image.env").write_text(
             "IMAGE=localhost/openshell-lab-streamlit:abcdef1\n",
             encoding="utf-8",
         )
@@ -410,7 +410,7 @@ if [[ "$*" == *" is-active "* ]]; then
     exit 0
 fi
 if [[ "$*" == *" show "* ]]; then
-    printf '{ path=/usr/local/bin/openshell ; argv[]=/usr/local/bin/openshell forward service openshell-lab5 --target-port 8501 --local %s ; }\n' "${UNIT_BIND:?}"
+    printf '{ path=/usr/local/bin/openshell ; argv[]=/usr/local/bin/openshell forward service openshell-lab4 --target-port 8501 --local %s ; }\n' "${UNIT_BIND:?}"
     exit 0
 fi
 exit 2
